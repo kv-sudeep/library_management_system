@@ -70,7 +70,7 @@ relative links behave the same as a real deployment:
 
 ```bash
 cd kishkinda-library
-python -m http.server 8080
+python -m http.server 8080 --bind 127.0.0.1
 # visit http://localhost:8080/login.html
 ```
 
