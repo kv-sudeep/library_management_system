@@ -131,3 +131,4 @@ now renders with real numbers on first load.
 | Frontend | Vanilla HTML/CSS/JS — no build step, no framework |
 | Charts   | Chart.js 4 (line, bar, doughnut, pie, radar) |
 | Fonts    | Cormorant Garamond (display) + DM Sans (UI) |
+![alt text](<Screenshot 2026-06-18 093122.png>) ![alt text](<Screenshot 2026-06-18 093130.png>) ![alt text](<Screenshot 2026-06-18 093143.png>) ![alt text](<Screenshot 2026-06-18 093228.png>) ![alt text](<Screenshot 2026-06-18 093242.png>) ![alt text](<Screenshot 2026-06-18 093344.png>) ![alt text](<Screenshot 2026-06-18 093353.png>)
