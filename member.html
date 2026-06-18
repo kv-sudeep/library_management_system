@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Home — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="hero">
+        <div class="hero-h">Welcome back, <em id="heroName">Reader</em></div>
+        <div class="hero-p">Discover your next great read. Browse thousands of titles, track your reading journey, and get personalized recommendations.</div>
+        <div class="hero-acts">
+          <a href="books.html" class="btn" style="background:#fff;color:#1a1a1a">Browse Books</a>
+          <a href="mybooks.html" class="btn" style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.25)">My Books</a>
+        </div>
+      </div>
+
+      <div id="continueReadingSection" style="display:none;margin-bottom:32px">
+        <div class="sh2"><span class="sh2-t">📖 Continue Reading</span><a href="mybooks.html" class="btn btn-ghost btn-sm">My Books</a></div>
+        <div id="continueReadingGrid" class="books-grid"></div>
+      </div>
+
+      <div class="sh2"><span class="sh2-t">Trending This Week</span><a href="books.html" class="btn btn-ghost btn-sm">View All</a></div>
+      <div class="books-grid" id="trendingGrid" style="margin-bottom:32px"></div>
+
+      <div class="sh2"><span class="sh2-t">Recommended For You</span></div>
+      <div class="books-grid" id="recGrid" style="margin-bottom:32px"></div>
+
+      <div class="sh2"><span class="sh2-t">Recently Added</span><a href="books.html" class="btn btn-ghost btn-sm">Browse All →</a></div>
+      <div class="books-grid" id="featGrid"></div>
+    </div>
+  </div>
+</div>
+<div id="modalRoot"></div>
+<div id="cbWrap"></div>
+
+<script>
+const u = API.guard(); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'member.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('Home', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+document.getElementById('heroName').textContent = u.full_name||u.username;
+KUL.initOutsideClick(); KUL.loadNotifications();
+
+function bookCardHTML(b){
+  return `<div class="book-card" onclick="openDetail(${b.id})">
+    ${b.cover_image?`<img class="bc-img" src="${b.cover_image}" onerror="this.style.display='none'"/>`:'<div class="bc-ph">📕</div>'}
+    <div class="bc-body">
+      <div class="bc-title">${b.title}</div>
+      <div class="bc-author">${b.author?.name||'Unknown'}</div>
+      ${KUL.stars(b.avg_rating)}
+      <div class="bc-foot"><span class="bc-cat">${b.category?.name||'—'}</span><span class="${b.available_copies>0?'avail-y':'avail-n'}">${b.available_copies>0?b.available_copies+' avail':'Unavail.'}</span></div>
+    </div>
+  </div>`;
+}
+
+async function load(){
+  // Continue Reading
+  const prog = await API.get('/digital/my-progress');
+  if(Array.isArray(prog) && prog.length > 0){
+    document.getElementById('continueReadingSection').style.display = 'block';
+    document.getElementById('continueReadingGrid').innerHTML = prog.slice(0,4).map(p=>{
+      const b = p.book || {};
+      const pct = Math.round(p.percent_complete || 0);
+      return `<div class="book-card" onclick="window.open('read.html?book=${b.id}','_blank')">
+        ${b.cover_image?`<img class="bc-img" src="${b.cover_image}" onerror="this.style.display='none'"/>`:'<div class="bc-ph">📕</div>'}
+        <div class="bc-body">
+          <div class="bc-title">${b.title||'—'}</div>
+          <div style="margin:6px 0 4px;background:#eee;border-radius:4px;height:4px">
+            <div style="width:${pct}%;height:4px;background:var(--gold);border-radius:4px"></div>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${pct}% complete · p.${p.current_page}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  const trending = await API.get('/analytics/trending');
+  document.getElementById('trendingGrid').innerHTML = (Array.isArray(trending)?trending:[]).slice(0,4).map(t=>`
+    <div class="book-card" onclick="openDetail(${t.id})">
+      ${t.cover_image?`<img class="bc-img" src="${t.cover_image}" onerror="this.style.display='none'"/>`:'<div class="bc-ph">📕</div>'}
+      <div class="bc-body"><div class="bc-title">${t.title}</div><div class="bc-author" style="color:var(--gold);font-weight:600">🔥 ${t.borrow_count} borrows this week</div></div>
+    </div>`).join('') || KUL.empty('🔥','No trending data yet');
+
+  const rec = await API.get(`/books/recommendations/${u.id}`);
+  document.getElementById('recGrid').innerHTML = (Array.isArray(rec)?rec:[]).slice(0,4).map(bookCardHTML).join('') || KUL.empty('✨','Borrow some books to get personalized picks!');
+
+  const feat = await API.get('/books/featured');
+  document.getElementById('featGrid').innerHTML = (Array.isArray(feat)?feat:[]).slice(0,8).map(bookCardHTML).join('');
+}
+
+async function openDetail(id){
+  const b = await API.get(`/books/${id}`);
+  const reviews = await API.get(`/books/${id}/reviews`);
+  const revList = Array.isArray(reviews)?reviews:[];
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+      <div class="modal" style="max-width:640px">
+        <div style="display:grid;grid-template-columns:180px 1fr;gap:28px;align-items:start">
+          <div>
+            ${b.cover_image?`<img src="${b.cover_image}" style="width:100%;border-radius:12px;box-shadow:0 10px 32px rgba(0,0,0,.15)"/>`:'<div class="bc-ph" style="height:240px;border-radius:12px">📕</div>'}
+            <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+              ${b.available_copies>0?`<button class="btn btn-dark" style="justify-content:center" onclick="borrowBook(${b.id})">📖 Borrow Book</button>`:`<button class="btn btn-ghost" style="justify-content:center" onclick="reserveBook(${b.id})">🔖 Reserve</button>`}
+              ${b.is_digital?`<button class="btn btn-ghost" style="justify-content:center;color:var(--gold);border-color:var(--gold)" onclick="window.open('read.html?book=${b.id}','_blank')">📄 Read Online</button>`:''}
+              <button class="btn btn-ghost" style="justify-content:center" onclick="addWishlist(${b.id})">❤️ Wishlist</button>
+            </div>
+          </div>
+          <div>
+            <h3 style="font-size:25px;line-height:1.2;margin-bottom:4px">${b.title}</h3>
+            <p style="color:var(--muted);margin-bottom:10px;font-size:13.5px">${b.author?.name||''}</p>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+              <span style="font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:600;line-height:1">${b.avg_rating?b.avg_rating.toFixed(1):'—'}</span>${KUL.stars(b.avg_rating)}<span style="font-size:12px;color:var(--muted)">(${b.review_count} reviews)</span>
+            </div>
+            ${[['Category',b.category?.name],['Published',b.published_year],['Pages',b.pages],['Available',`${b.available_copies} / ${b.total_copies}`]].filter(([,v])=>v).map(([l,v])=>`<div style="display:flex;gap:8px;font-size:13px;margin-bottom:4px"><span style="color:var(--muted);min-width:80px">${l}</span><span style="font-weight:500">${v}</span></div>`).join('')}
+            ${b.description?`<p style="font-size:13px;color:var(--t2);line-height:1.7;margin-top:12px">${b.description}</p>`:''}
+            <div class="div"></div>
+            <p style="font-size:13px;font-weight:600;margin-bottom:8px">Write a Review</p>
+            <div style="display:flex;gap:4px;margin-bottom:8px">${[1,2,3,4,5].map(s=>`<button onclick="setRating(${s})" data-star="${s}" class="rate-star" style="background:none;border:none;cursor:pointer;font-size:24px;color:#e0d5c5">★</button>`).join('')}</div>
+            <textarea class="fi" id="reviewText" rows="2" placeholder="Share your thoughts…" style="margin-bottom:8px"></textarea>
+            <button class="btn btn-dark btn-sm" onclick="submitReview(${b.id})">Submit Review</button>
+          </div>
+        </div>
+        ${revList.length?`<div class="div"></div><p style="font-weight:600;font-size:13px;margin-bottom:12px">Reviews (${revList.length})</p>${revList.slice(0,3).map(r=>`<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f2f1ee"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">${KUL.stars(r.rating)}<span style="font-size:12px;font-weight:600">${r.user?.full_name||r.user?.username}</span></div><p style="font-size:13px;color:var(--t2);line-height:1.5">${r.comment}</p></div>`).join('')}`:''}
+        <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>
+      </div>
+    </div>`;
+  window._curRating=0;
+}
+function setRating(s){ window._curRating=s; document.querySelectorAll('.rate-star').forEach(el=>{el.style.color=parseInt(el.dataset.star)<=s?'#c9a84c':'#e0d5c5';}); }
+async function submitReview(id){ if(!window._curRating){API.toast('Select a rating','error');return;} await API.post(`/books/${id}/reviews`,{rating:window._curRating,comment:document.getElementById('reviewText').value}); API.toast('Review submitted!','success'); closeModal(); }
+async function borrowBook(id){ const r=await API.post('/transactions/issue',{book_id:id}); if(r.error)API.toast(r.error,'error'); else{API.toast('Book issued! Due in 14 days.','success');closeModal();load();} }
+async function reserveBook(id){ const r=await API.post('/transactions/reserve',{book_id:id}); if(r.error)API.toast(r.error,'error'); else{API.toast('Reserved!','success');closeModal();} }
+async function addWishlist(id){ await API.post(`/books/wishlist/${id}`,{}); API.toast('Added to wishlist','success'); }
+function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
+
+load();
+</script>
+</body></html>

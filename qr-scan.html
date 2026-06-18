@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>QR Scanner — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<style>
+  .scan-box { max-width: 500px; margin: 0 auto; background: var(--w); padding: 24px; border-radius: var(--r2); box-shadow: var(--sh); }
+  #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+  .step-indicator { display: flex; gap: 8px; margin-bottom: 20px; }
+  .step { flex: 1; text-align: center; padding: 12px; border-radius: 8px; background: #f2f1ee; font-size: 14px; font-weight: 500; color: var(--muted); }
+  .step.active { background: #1a1a1a; color: #fff; }
+  .info-card { display: flex; gap: 16px; align-items: center; padding: 16px; background: #faf9f7; border-radius: 8px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="sh2" style="margin-bottom:24px">
+        <div><h2 style="font-size:34px;letter-spacing:-1px">QR Scanner</h2><p style="color:var(--muted);font-size:14px">Issue or return books instantly</p></div>
+        <select class="fi" id="modeSelect" style="width:140px; font-weight:600" onchange="resetScan()">
+          <option value="issue">Issue Book</option>
+          <option value="return">Return Book</option>
+        </select>
+      </div>
+
+      <div class="scan-box">
+        <div class="step-indicator">
+          <div class="step active" id="step1">1. Scan Member</div>
+          <div class="step" id="step2">2. Scan Book</div>
+        </div>
+
+        <div id="userInfo" style="display:none" class="info-card">
+          <div style="font-size:32px">👤</div>
+          <div><div style="font-weight:600;font-size:16px" id="uName"></div><div style="font-size:12px;color:var(--muted)" id="uLoans"></div></div>
+        </div>
+
+        <div id="bookInfo" style="display:none" class="info-card">
+          <div style="font-size:32px">📕</div>
+          <div><div style="font-weight:600;font-size:16px" id="bTitle"></div><div style="font-size:12px;color:var(--muted)" id="bAvail"></div></div>
+        </div>
+
+        <div id="reader"></div>
+
+        <div style="display:flex;gap:12px;margin-top:20px;justify-content:space-between">
+          <button class="btn btn-ghost" onclick="resetScan()">Reset</button>
+          <button class="btn btn-dark" id="actionBtn" style="display:none" onclick="executeAction()">Confirm</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script>
+const u = API.guard(); if(!u || (u.role!=='admin' && u.role!=='librarian')) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'qr-scan.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('QR Scanner', u);
+
+let scanner = null;
+let currentStep = 1;
+let scannedUser = null;
+let scannedBook = null;
+
+function initScanner() {
+  if (scanner) { scanner.clear(); }
+  scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, /* verbose= */ false);
+  scanner.render(onScanSuccess, onScanFailure);
+}
+
+async function onScanSuccess(decodedText, decodedResult) {
+  if (scanner) { scanner.pause(true); }
+  const res = await API.post('/qr/scan', { code: decodedText });
+  if (res.error) {
+    API.toast(res.error, 'error');
+    if (scanner) { setTimeout(() => scanner.resume(), 1500); }
+    return;
+  }
+
+  if (currentStep === 1) {
+    if (res.type !== 'user') {
+      API.toast('Please scan a Member Card first', 'error');
+      if (scanner) { setTimeout(() => scanner.resume(), 1500); }
+      return;
+    }
+    scannedUser = res;
+    document.getElementById('uName').innerText = res.name;
+    document.getElementById('uLoans').innerText = res.active_loans + ' active loans';
+    document.getElementById('userInfo').style.display = 'flex';
+    document.getElementById('step1').classList.remove('active');
+    document.getElementById('step2').classList.add('active');
+    currentStep = 2;
+    API.toast('Member scanned', 'success');
+    if (scanner) { setTimeout(() => scanner.resume(), 1000); }
+  } else {
+    if (res.type !== 'book') {
+      API.toast('Please scan a Book QR', 'error');
+      if (scanner) { setTimeout(() => scanner.resume(), 1500); }
+      return;
+    }
+    scannedBook = res;
+    document.getElementById('bTitle').innerText = res.title;
+    document.getElementById('bAvail').innerText = res.available ? 'Available' : 'Unavailable/Issued';
+    document.getElementById('bookInfo').style.display = 'flex';
+    document.getElementById('reader').style.display = 'none';
+    const mode = document.getElementById('modeSelect').value;
+    document.getElementById('actionBtn').innerText = mode === 'issue' ? 'Issue Book' : 'Return Book';
+    document.getElementById('actionBtn').style.display = 'inline-flex';
+    API.toast('Book scanned', 'success');
+  }
+}
+
+function onScanFailure(error) { /* ignore */ }
+
+function resetScan() {
+  currentStep = 1;
+  scannedUser = null;
+  scannedBook = null;
+  document.getElementById('userInfo').style.display = 'none';
+  document.getElementById('bookInfo').style.display = 'none';
+  document.getElementById('reader').style.display = 'block';
+  document.getElementById('actionBtn').style.display = 'none';
+  document.getElementById('step1').classList.add('active');
+  document.getElementById('step2').classList.remove('active');
+  if (scanner && scanner.getState() === Html5QrcodeScannerState.PAUSED) {
+    scanner.resume();
+  } else if (!scanner || scanner.getState() !== Html5QrcodeScannerState.SCANNING) {
+    initScanner();
+  }
+}
+
+async function executeAction() {
+  const mode = document.getElementById('modeSelect').value;
+  const endpoint = mode === 'issue' ? '/qr/issue' : '/qr/return';
+  const btn = document.getElementById('actionBtn');
+  btn.disabled = true;
+  const res = await API.post(endpoint, {
+    user_code: 'KUL-USER-' + scannedUser.id,
+    book_code: 'KUL-BOOK-' + scannedBook.id
+  });
+  btn.disabled = false;
+  if (res.error) {
+    API.toast(res.error, 'error');
+  } else {
+    API.toast(mode === 'issue' ? 'Book successfully issued!' : 'Book successfully returned!', 'success');
+    resetScan();
+  }
+}
+
+window.onload = () => {
+  initScanner();
+};
+</script>
+</body>
+</html>

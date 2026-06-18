@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Profile — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page" style="max-width:760px">
+      <div class="ph"><h2>My Profile</h2></div>
+      <div style="display:flex;align-items:center;gap:20px;margin-bottom:30px">
+        <div class="av" style="width:72px;height:72px;font-size:26px" id="bigAv"></div>
+        <div>
+          <h3 style="font-size:24px;margin-bottom:2px" id="profName"></h3>
+          <p style="color:var(--muted);font-size:13px" id="profEmail"></p>
+        </div>
+      </div>
+      <div class="card-3d">
+        <h3 style="font-size:18px;margin-bottom:18px">Edit Profile</h3>
+        <div class="fg"><label class="fl">Full Name</label><input class="fi" id="p_name"/></div>
+        <div class="fg"><label class="fl">Phone</label><input class="fi" id="p_phone"/></div>
+        <div class="fg"><label class="fl">Address</label><textarea class="fi" id="p_addr" rows="3"></textarea></div>
+        <button class="btn btn-dark" onclick="save()">Save Changes</button>
+      </div>
+
+      <div class="card-3d" id="qrCard" style="margin-top:24px;text-align:center;display:none">
+        <h3 style="font-size:18px;margin-bottom:6px">📳 My Library Card QR</h3>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:18px">Show this to a librarian to issue books instantly via the QR scanner.</p>
+        <img id="qrImg" src="" style="width:180px;height:180px;border-radius:12px;border:3px solid #f2f1ee"/>
+        <div style="margin-top:14px">
+          <a id="qrDownload" href="#" download="library-card-qr.png" class="btn btn-ghost btn-sm">⬇️ Download QR</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="cbWrap"></div>
+
+<script>
+const u = API.guard(); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'profile.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('My Profile', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+KUL.initOutsideClick(); KUL.loadNotifications();
+
+document.getElementById('bigAv').textContent = (u.full_name||u.username||'U')[0].toUpperCase();
+document.getElementById('profName').innerHTML = `${u.full_name||u.username} <span class="chip chip-${u.role}" style="margin-left:8px;vertical-align:middle">${u.role}</span>`;
+document.getElementById('profEmail').textContent = u.email;
+document.getElementById('p_name').value = u.full_name||'';
+document.getElementById('p_phone').value = u.phone||'';
+document.getElementById('p_addr').value = u.address||'';
+
+async function save(){
+  const body = { full_name: document.getElementById('p_name').value, phone: document.getElementById('p_phone').value, address: document.getElementById('p_addr').value };
+  const r = await API.put('/auth/me', body);
+  if(r.id){ API.toast('Profile updated!','success'); API.setSession(API.getToken(), r); }
+  else API.toast(r.error||'Error','error');
+}
+
+// Auto-generate and display QR for members
+if(u.role === 'member'){
+  (async () => {
+    const res = await API.post(`/qr/generate/user/${u.id}`, {});
+    if(res.path){
+      const card = document.getElementById('qrCard');
+      const img  = document.getElementById('qrImg');
+      const dl   = document.getElementById('qrDownload');
+      img.src = `http://localhost:5000${res.path}`;
+      dl.href = `http://localhost:5000${res.path}`;
+      card.style.display = 'block';
+    }
+  })();
+}
+
+</script>
+</body></html>

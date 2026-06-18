@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Books — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="sh2" style="margin-bottom:18px">
+        <div><h2 style="font-size:34px;letter-spacing:-1px">Book Catalogue</h2><p style="color:var(--muted);font-size:14px">Explore the entire collection</p></div>
+        <button class="btn btn-dark" id="addBtn" style="display:none" onclick="openAdd()">+ Add Book</button>
+      </div>
+
+      <div class="tb-search" style="width:100%;margin-bottom:16px;padding:12px 16px">
+        <span>🔍</span>
+        <input id="searchInp" placeholder="Search by title, author, description…" oninput="onSearch()"/>
+      </div>
+
+      <div class="fb" id="catFilters"></div>
+
+      <div id="booksGrid" class="books-grid"></div>
+      <div id="pager" style="display:flex;justify-content:center;gap:8px;margin-top:26px"></div>
+    </div>
+  </div>
+</div>
+<div id="modalRoot"></div>
+<div id="cbWrap"></div>
+
+<script>
+const u = API.guard(); if(!u) throw '';
+const isStaff = u.role==='admin'||u.role==='librarian';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'books.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('Book Catalogue', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+KUL.initOutsideClick(); KUL.loadNotifications();
+if(isStaff) document.getElementById('addBtn').style.display='inline-flex';
+
+let state = { search:'', cat:'', sort:'title', avail:false, page:1, pages:1 };
+let categories = [];
+let searchDebounce;
+
+function onSearch(){
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(()=>{ state.search = document.getElementById('searchInp').value; state.page=1; load(); }, 350);
+}
+
+async function loadCats(){
+  categories = await API.get('/books/categories');
+  if(!Array.isArray(categories)) categories=[];
+  renderFilters();
+}
+function renderFilters(){
+  const sortOpts = `<select class="fi" style="width:auto;padding:7px 12px;font-size:12px;margin-left:auto" onchange="state.sort=this.value;load()">
+    <option value="title">A–Z</option><option value="newest">Newest</option><option value="popular">Popular</option>
+  </select>`;
+  document.getElementById('catFilters').innerHTML = `
+    <button class="fc ${!state.cat?'on':''}" onclick="setCat('')">All</button>
+    ${categories.map(c=>`<button class="fc ${state.cat==c.id?'on':''}" onclick="setCat(${c.id})">${c.icon||''} ${c.name}</button>`).join('')}
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--t2);margin-left:auto">
+      <input type="checkbox" ${state.avail?'checked':''} onchange="state.avail=this.checked;load()"/> Available only
+    </label>
+  `;
+}
+function setCat(id){ state.cat=id; state.page=1; renderFilters(); load(); }
+
+async function load(){
+  document.getElementById('booksGrid').innerHTML = KUL.loader();
+  let url = `/books/?page=${state.page}&per_page=20&sort_by=${state.sort}`;
+  if(state.search) url += `&search=${encodeURIComponent(state.search)}`;
+  if(state.cat) url += `&category_id=${state.cat}`;
+  if(state.avail) url += `&available_only=true`;
+  const d = await API.get(url);
+  const books = Array.isArray(d.books)?d.books:[];
+  state.pages = d.pages||1;
+  renderFilters();
+  document.getElementById('booksGrid').innerHTML = books.length===0
+    ? KUL.empty('📚','No books found','Try adjusting your search or filters')
+    : books.map(b=>bookCardHTML(b)).join('');
+  renderPager();
+}
+
+function bookCardHTML(b){
+  return `
+    <div class="book-card" onclick="openDetail(${b.id})">
+      ${b.cover_image ? `<img class="bc-img" src="${b.cover_image}" onerror="this.style.display='none'"/>` : `<div class="bc-ph">📕</div>`}
+      <div class="bc-body">
+        <div class="bc-title">${b.title}</div>
+        <div class="bc-author">${b.author?.name||'Unknown Author'}</div>
+        ${KUL.stars(b.avg_rating)}
+        <div class="bc-foot">
+          <span class="bc-cat">${b.category?.name||'—'}</span>
+          <span class="${b.available_copies>0?'avail-y':'avail-n'}">${b.available_copies>0?b.available_copies+' avail':'Unavail.'}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderPager(){
+  if(state.pages<=1){ document.getElementById('pager').innerHTML=''; return; }
+  document.getElementById('pager').innerHTML = `
+    <button class="btn btn-ghost btn-sm" ${state.page<=1?'disabled style="opacity:.4"':''} onclick="state.page--;load()">← Prev</button>
+    <span style="padding:7px 14px;font-size:12px;color:var(--muted)">${state.page} / ${state.pages}</span>
+    <button class="btn btn-ghost btn-sm" ${state.page>=state.pages?'disabled style="opacity:.4"':''} onclick="state.page++;load()">Next →</button>`;
+}
+
+// ── Book Detail Modal ─────────────────────────────────────────
+async function openDetail(id){
+  const b = await API.get(`/books/${id}`);
+  const reviews = await API.get(`/books/${id}/reviews`);
+  const revList = Array.isArray(reviews)?reviews:[];
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+      <div class="modal" style="max-width:640px">
+        <div style="display:grid;grid-template-columns:180px 1fr;gap:28px;align-items:start">
+          <div>
+            ${b.cover_image?`<img src="${b.cover_image}" style="width:100%;border-radius:12px;box-shadow:0 10px 32px rgba(0,0,0,.15)"/>`:'<div class="bc-ph" style="height:240px;border-radius:12px">📕</div>'}
+            ${!isStaff?`
+              <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+                ${b.available_copies>0?`<button class="btn btn-dark" style="justify-content:center" onclick="borrowBook(${b.id})">📖 Borrow Book</button>`:`<button class="btn btn-ghost" style="justify-content:center" onclick="reserveBook(${b.id})">🔖 Reserve</button>`}
+                ${b.is_digital?`<button class="btn btn-ghost" style="justify-content:center;color:var(--gold);border-color:var(--gold)" onclick="window.open('read.html?book=${b.id}','_blank')">📄 Read Online</button>`:''}
+                <button class="btn btn-ghost" style="justify-content:center" onclick="addWishlist(${b.id})">❤️ Wishlist</button>
+              </div>`:`
+              <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+                <button class="btn btn-ghost" style="justify-content:center" onclick="generateQR(${b.id})">📷 View/Print QR</button>
+              </div>`}
+          </div>
+          <div>
+            <h3 style="font-size:25px;line-height:1.2;margin-bottom:4px">${b.title}</h3>
+            <p style="color:var(--muted);margin-bottom:10px;font-size:13.5px">${b.author?.name||''}</p>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+              <span style="font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:600;line-height:1">${b.avg_rating?b.avg_rating.toFixed(1):'—'}</span>
+              ${KUL.stars(b.avg_rating)}
+              <span style="font-size:12px;color:var(--muted)">(${b.review_count} reviews)</span>
+            </div>
+            ${[['Category',b.category?.name],['Published',b.published_year],['Pages',b.pages],['Language',b.language],['ISBN',b.isbn],['Available',`${b.available_copies} / ${b.total_copies}`],['Borrowed',`${b.borrow_count}×`]].filter(([,v])=>v).map(([l,v])=>`<div style="display:flex;gap:8px;font-size:13px;margin-bottom:4px"><span style="color:var(--muted);min-width:80px">${l}</span><span style="font-weight:500">${v}</span></div>`).join('')}
+            ${b.description?`<p style="font-size:13px;color:var(--t2);line-height:1.7;margin-top:12px">${b.description}</p>`:''}
+            <div class="div"></div>
+            <p style="font-size:13px;font-weight:600;margin-bottom:8px">Write a Review</p>
+            <div id="starPicker" style="display:flex;gap:4px;margin-bottom:8px">
+              ${[1,2,3,4,5].map(s=>`<button onclick="setRating(${s})" data-star="${s}" style="background:none;border:none;cursor:pointer;font-size:24px;color:#e0d5c5" class="rate-star">★</button>`).join('')}
+            </div>
+            <textarea class="fi" id="reviewText" rows="2" placeholder="Share your thoughts…" style="margin-bottom:8px"></textarea>
+            <button class="btn btn-dark btn-sm" onclick="submitReview(${b.id})">Submit Review</button>
+          </div>
+        </div>
+        ${revList.length?`<div class="div"></div><p style="font-weight:600;font-size:13px;margin-bottom:12px">Reviews (${revList.length})</p>${revList.slice(0,3).map(r=>`<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f2f1ee"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">${KUL.stars(r.rating)}<span style="font-size:12px;font-weight:600">${r.user?.full_name||r.user?.username}</span></div><p style="font-size:13px;color:var(--t2);line-height:1.5">${r.comment}</p></div>`).join('')}`:''}
+        <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>
+      </div>
+    </div>`;
+  window._curRating = 0;
+}
+function setRating(s){
+  window._curRating = s;
+  document.querySelectorAll('.rate-star').forEach(el=>{ el.style.color = parseInt(el.dataset.star)<=s ? '#c9a84c' : '#e0d5c5'; });
+}
+async function submitReview(bookId){
+  if(!window._curRating){ API.toast('Please select a rating','error'); return; }
+  await API.post(`/books/${bookId}/reviews`,{rating:window._curRating,comment:document.getElementById('reviewText').value});
+  API.toast('Review submitted!','success'); closeModal();
+}
+async function borrowBook(id){ const r=await API.post('/transactions/issue',{book_id:id}); if(r.error)API.toast(r.error,'error'); else{API.toast('Book issued! Due in 14 days.','success');closeModal();load();} }
+async function reserveBook(id){ const r=await API.post('/transactions/reserve',{book_id:id}); if(r.error)API.toast(r.error,'error'); else{API.toast('Reserved!','success');closeModal();} }
+async function addWishlist(id){ await API.post(`/books/wishlist/${id}`,{}); API.toast('Added to wishlist','success'); }
+async function generateQR(id){
+  const res = await API.post(`/qr/generate/book/${id}`, {});
+  if(res.error) API.toast(res.error, 'error');
+  else window.open(res.path, '_blank');
+}
+function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
+
+// ── Add Book Modal (staff) ──────────────────────────────────────
+function openAdd(){
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+      <div class="modal">
+        <h3>Add New Book</h3><p class="modal-sub">Add a book to the library catalogue</p>
+        <form onsubmit="submitAdd(event)">
+          <div class="fg"><label class="fl">Title *</label><input class="fi" id="nb_title" required/></div>
+          <div class="fg2">
+            <div class="fg"><label class="fl">Author Name</label><input class="fi" id="nb_author"/></div>
+            <div class="fg">
+              <label class="fl">ISBN</label>
+              <div style="display:flex;gap:8px">
+                <input class="fi" id="nb_isbn" style="flex:1" placeholder="e.g. 978-0451524935"/>
+                <button type="button" class="btn btn-dark" onclick="lookupISBN(event)">🔍 Lookup</button>
+              </div>
+            </div>
+          </div>
+          <div class="fg"><label class="fl">Category</label><select class="fi" id="nb_cat"><option value="">Select category</option>${categories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+          <div class="fg2">
+            <div class="fg"><label class="fl">Year</label><input class="fi" type="number" id="nb_year"/></div>
+            <div class="fg"><label class="fl">Total Copies</label><input class="fi" type="number" id="nb_total" value="1" min="1"/></div>
+          </div>
+          <div class="fg"><label class="fl">Cover Image URL</label><input class="fi" id="nb_cover" placeholder="https://…"/></div>
+          <div class="fg"><label class="fl">Description</label><textarea class="fi" id="nb_desc" rows="3"></textarea></div>
+          <div class="modal-foot"><button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-dark">Add Book</button></div>
+        </form>
+      </div>
+    </div>`;
+}
+async function lookupISBN(e){
+  const isbn = document.getElementById('nb_isbn').value.trim();
+  if(!isbn){ API.toast('Please enter an ISBN first','error'); return; }
+  const btn = e.currentTarget; const old = btn.innerHTML;
+  btn.innerHTML = '<span class="spin" style="width:14px;height:14px;border-width:2px;margin:0"></span>'; btn.disabled = true;
+  const res = await API.get('/books/lookup/' + encodeURIComponent(isbn));
+  if(res.error) API.toast(res.error,'error');
+  else {
+    if(res.title) document.getElementById('nb_title').value = res.title;
+    if(res.author_name) document.getElementById('nb_author').value = res.author_name;
+    if(res.published_year) document.getElementById('nb_year').value = res.published_year;
+    if(res.cover_image) document.getElementById('nb_cover').value = res.cover_image;
+    API.toast('Book details populated!','success');
+  }
+  btn.innerHTML = old; btn.disabled = false;
+}
+async function submitAdd(e){
+  e.preventDefault();
+  const body = {
+    title: document.getElementById('nb_title').value, author_name: document.getElementById('nb_author').value,
+    isbn: document.getElementById('nb_isbn').value, category_id: document.getElementById('nb_cat').value || null,
+    published_year: document.getElementById('nb_year').value || null, total_copies: parseInt(document.getElementById('nb_total').value)||1,
+    available_copies: parseInt(document.getElementById('nb_total').value)||1, cover_image: document.getElementById('nb_cover').value,
+    description: document.getElementById('nb_desc').value,
+  };
+  const r = await API.post('/books/', body);
+  if(r.error) API.toast(r.error,'error'); else { API.toast('Book added!','success'); closeModal(); load(); }
+}
+
+loadCats().then(load);
+</script>
+</body></html>

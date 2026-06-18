@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Users — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="ph"><h2>User Management</h2><p id="uCount">Loading…</p></div>
+      <div class="fb">
+        <input class="fi" id="uSearch" placeholder="Search users…" style="max-width:260px" oninput="debSearch()"/>
+        <button class="fc on" onclick="setRole('')">All Roles</button>
+        <button class="fc" onclick="setRole('member')">Member</button>
+        <button class="fc" onclick="setRole('librarian')">Librarian</button>
+        <button class="fc" onclick="setRole('admin')">Admin</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Member Since</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="uBody"><tr><td colspan="6"><div class="ldr"><div class="spin"></div></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="cbWrap"></div>
+
+<script>
+const u = API.guard('staff'); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'users.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('User Management', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+KUL.initOutsideClick(); KUL.loadNotifications();
+
+let state={search:'',role:''}, deb;
+function debSearch(){ clearTimeout(deb); deb=setTimeout(()=>{state.search=document.getElementById('uSearch').value;load();},350); }
+function setRole(r){ state.role=r; document.querySelectorAll('.fb .fc').forEach(b=>b.classList.remove('on')); event.target.classList.add('on'); load(); }
+
+async function load(){
+  document.getElementById('uBody').innerHTML='<tr><td colspan="6"><div class="ldr"><div class="spin"></div></div></td></tr>';
+  let url=`/users/?per_page=100`;
+  if(state.search) url+=`&search=${encodeURIComponent(state.search)}`;
+  if(state.role) url+=`&role=${state.role}`;
+  const d = await API.get(url);
+  const list = d.users||[];
+  document.getElementById('uCount').textContent = `${d.total||list.length} users in the system`;
+  document.getElementById('uBody').innerHTML = list.length===0
+    ? `<tr><td colspan="6">${KUL.empty('👤','No users found')}</td></tr>`
+    : list.map(usr=>`
+      <tr>
+        <td><div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:50%;background:var(--light);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--t2)">${(usr.full_name||usr.username||'?')[0].toUpperCase()}</div><div><div style="font-weight:600;font-size:13px">${usr.full_name||usr.username}</div><div style="font-size:11px;color:var(--muted)">@${usr.username}</div></div></div></td>
+        <td style="font-size:13px;color:var(--muted)">${usr.email}</td>
+        <td><span class="chip chip-${usr.role}">${usr.role}</span></td>
+        <td style="font-size:12px;color:var(--muted)">${KUL.date(usr.membership_date)}</td>
+        <td style="font-size:12px;font-weight:600;color:${usr.is_active?'#16a34a':'#dc2626'}">${usr.is_active?'✓ Active':'✗ Inactive'}</td>
+        <td>${u.role==='admin'?`<button class="btn btn-ghost btn-xs" onclick="toggleActive(${usr.id},${usr.is_active})">${usr.is_active?'Deactivate':'Activate'}</button>`:''}</td>
+      </tr>`).join('');
+}
+async function toggleActive(id,active){
+  await API.put(`/users/${id}`,{is_active:!active});
+  API.toast('User updated','success'); load();
+}
+load();
+</script>
+</body></html>

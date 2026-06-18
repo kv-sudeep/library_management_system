@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Wishlist — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="ph"><h2>My Wishlist</h2><p>Books you want to read</p></div>
+      <div class="books-grid" id="wGrid"><div class="ldr"><div class="spin"></div></div></div>
+    </div>
+  </div>
+</div>
+<div id="modalRoot"></div>
+<div id="cbWrap"></div>
+
+<script>
+const u = API.guard(); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'wishlist.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('Wishlist', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+KUL.initOutsideClick(); KUL.loadNotifications();
+
+async function load(){
+  const items = await API.get('/books/wishlist');
+  const list = Array.isArray(items)?items:[];
+  document.getElementById('wGrid').innerHTML = list.length===0
+    ? KUL.empty('❤️','Wishlist is empty','Browse books and click the heart icon to add to your wishlist')
+    : list.map(w=>`
+      <div class="book-card">
+        ${w.book.cover_image?`<img class="bc-img" src="${w.book.cover_image}" onerror="this.style.display='none'"/>`:'<div class="bc-ph">📕</div>'}
+        <div class="bc-body">
+          <div class="bc-title">${w.book.title}</div>
+          <div class="bc-author">${w.book.author?.name||''}</div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn btn-ghost btn-xs" style="flex:1;justify-content:center" onclick="openDetail(${w.book.id})">View</button>
+            <button class="btn btn-ghost btn-xs" style="color:#dc2626" onclick="remove(${w.book.id})">✕</button>
+          </div>
+        </div>
+      </div>`).join('');
+}
+async function remove(id){
+  await API.del(`/books/wishlist/${id}`);
+  API.toast('Removed from wishlist','success'); load();
+}
+async function openDetail(id){
+  const b = await API.get(`/books/${id}`);
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-bg" onclick="if(event.target===this)document.getElementById('modalRoot').innerHTML=''">
+      <div class="modal" style="max-width:480px">
+        <div style="display:flex;gap:20px">
+          ${b.cover_image?`<img src="${b.cover_image}" style="width:120px;border-radius:10px;flex-shrink:0"/>`:'<div class="bc-ph" style="width:120px;height:160px;border-radius:10px;flex-shrink:0">📕</div>'}
+          <div>
+            <h3 style="font-size:20px;margin-bottom:4px">${b.title}</h3>
+            <p style="color:var(--muted);font-size:13px;margin-bottom:8px">${b.author?.name||''}</p>
+            ${KUL.stars(b.avg_rating)}
+            <p style="font-size:13px;color:var(--t2);margin-top:10px;line-height:1.6">${b.description||''}</p>
+          </div>
+        </div>
+        <div class="modal-foot">
+          ${b.available_copies>0?`<button class="btn btn-dark" onclick="borrowBook(${b.id})">Borrow Now</button>`:`<button class="btn btn-ghost" onclick="reserveBook(${b.id})">Reserve</button>`}
+          <button class="btn btn-ghost" onclick="document.getElementById('modalRoot').innerHTML=''">Close</button>
+        </div>
+      </div>
+    </div>`;
+}
+async function borrowBook(id){ const r=await API.post('/transactions/issue',{book_id:id}); if(r.error)API.toast(r.error,'error'); else{API.toast('Issued!','success');document.getElementById('modalRoot').innerHTML='';} }
+async function reserveBook(id){ const r=await API.post('/transactions/reserve',{book_id:id}); if(r.error)API.toast(r.error,'error'); else{API.toast('Reserved!','success');document.getElementById('modalRoot').innerHTML='';} }
+load();
+</script>
+</body></html>

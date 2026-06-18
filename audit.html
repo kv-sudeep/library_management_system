@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Audit Logs — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="ph"><h2>Audit Logs</h2><p>System activity and security events</p></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Time</th><th>User ID</th><th>Action</th><th>Resource</th><th>Details</th></tr></thead>
+          <tbody id="aBody"><tr><td colspan="5"><div class="ldr"><div class="spin"></div></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="cbWrap"></div>
+<script>
+const u = API.guard('staff'); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'audit.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('Audit Logs', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+KUL.initOutsideClick(); KUL.loadNotifications();
+
+async function load(){
+  const d = await API.get('/users/audit-logs');
+  const logs = d.logs||[];
+  document.getElementById('aBody').innerHTML = logs.length===0
+    ? `<tr><td colspan="5">${KUL.empty('🔐','No audit logs yet')}</td></tr>`
+    : logs.map(l=>`
+      <tr>
+        <td style="font-size:12px;color:var(--muted)">${new Date(l.timestamp).toLocaleString()}</td>
+        <td style="font-size:12px">${l.user_id||'—'}</td>
+        <td><code style="font-size:11px;background:var(--light);padding:2px 8px;border-radius:4px;color:var(--t2)">${l.action}</code></td>
+        <td style="font-size:12px;color:var(--t2)">${l.resource||'—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${l.details||'—'}</td>
+      </tr>`).join('');
+}
+load();
+</script>
+</body></html>

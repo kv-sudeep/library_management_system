@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Transactions — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="ph"><h2>Transactions</h2><p id="txCount">Loading…</p></div>
+      <div class="fb" id="statusFilters">
+        <button class="fc on" onclick="setStatus('')">All</button>
+        <button class="fc" onclick="setStatus('issued')">Issued</button>
+        <button class="fc" onclick="setStatus('returned')">Returned</button>
+        <button class="fc" onclick="setStatus('overdue')">Overdue</button>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>Member</th><th>Book</th><th>Issued</th><th>Due</th><th>Returned</th><th>Status</th><th>Fine</th><th>Action</th></tr></thead>
+          <tbody id="txBody"><tr><td colspan="9"><div class="ldr"><div class="spin"></div></div></td></tr></tbody>
+        </table>
+      </div>
+      <div id="pager" style="display:flex;justify-content:center;gap:8px;margin-top:22px"></div>
+    </div>
+  </div>
+</div>
+<div id="cbWrap"></div>
+
+<script>
+const u = API.guard('staff'); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'transactions.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('Transactions', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+KUL.initOutsideClick(); KUL.loadNotifications();
+
+let state = {status:'', page:1, pages:1};
+function setStatus(s){
+  state.status=s; state.page=1;
+  document.querySelectorAll('#statusFilters .fc').forEach(b=>b.classList.remove('on'));
+  event.target.classList.add('on');
+  load();
+}
+async function load(){
+  document.getElementById('txBody').innerHTML = '<tr><td colspan="9"><div class="ldr"><div class="spin"></div></div></td></tr>';
+  let url = `/transactions/all?page=${state.page}&per_page=20`;
+  if(state.status) url += `&status=${state.status}`;
+  const d = await API.get(url);
+  const txs = d.transactions||[];
+  state.pages = d.pages||1;
+  document.getElementById('txCount').textContent = `${d.total||0} total records`;
+  document.getElementById('txBody').innerHTML = txs.length===0
+    ? `<tr><td colspan="9">${KUL.empty('📋','No transactions found')}</td></tr>`
+    : txs.map(t=>`
+      <tr>
+        <td style="color:var(--muted);font-size:12px">#${t.id}</td>
+        <td><div style="display:flex;align-items:center;gap:8px"><div style="width:28px;height:28px;border-radius:50%;background:var(--light);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--t2)">${(t.user?.username||'?')[0].toUpperCase()}</div><div><div style="font-weight:600;font-size:13px">${t.user?.full_name||t.user?.username||'—'}</div><div style="font-size:11px;color:var(--muted)">${t.user?.email||''}</div></div></div></td>
+        <td style="font-weight:600;font-size:13px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.book?.title||'—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${KUL.date(t.issue_date)}</td>
+        <td style="font-size:12px;color:var(--muted)">${KUL.date(t.due_date)}</td>
+        <td style="font-size:12px;color:var(--muted)">${KUL.date(t.return_date)}</td>
+        <td>${KUL.badge(t.status)}</td>
+        <td style="font-size:13px;font-weight:600;color:${t.fine_paid?'#16a34a':'#dc2626'}">${t.fine_amount>0?'$'+t.fine_amount.toFixed(2):'—'}</td>
+        <td>${t.status==='issued'?`<button class="btn btn-ghost btn-xs" onclick="returnBook(${t.id})">Return</button>`:''}</td>
+      </tr>`).join('');
+  renderPager();
+}
+function renderPager(){
+  if(state.pages<=1){ document.getElementById('pager').innerHTML=''; return; }
+  document.getElementById('pager').innerHTML = `
+    <button class="btn btn-ghost btn-sm" ${state.page<=1?'disabled style="opacity:.4"':''} onclick="state.page--;load()">← Prev</button>
+    <span style="padding:7px 14px;font-size:12px;color:var(--muted)">${state.page} / ${state.pages}</span>
+    <button class="btn btn-ghost btn-sm" ${state.page>=state.pages?'disabled style="opacity:.4"':''} onclick="state.page++;load()">Next →</button>`;
+}
+async function returnBook(id){
+  const r = await API.post(`/transactions/return/${id}`,{});
+  if(r.error) API.toast(r.error,'error');
+  else { API.toast(r.fine_amount>0?`Returned! Fine: $${r.fine_amount.toFixed(2)}`:'Returned successfully!','success'); load(); }
+}
+load();
+</script>
+</body></html>

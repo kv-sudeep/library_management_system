@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Read Book — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+<style>
+  body { overflow: hidden; }
+  #viewerShell { display: flex; flex-direction: column; height: 100vh; }
+  #toolbar { display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: #1a1a1a; color: #fff; flex-shrink: 0; }
+  #toolbar .tb-title { font-family: 'Cormorant Garamond', serif; font-size: 18px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tb-btn { background: rgba(255,255,255,.1); border: none; color: #fff; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: background .15s; }
+  .tb-btn:hover { background: rgba(255,255,255,.2); }
+  .tb-btn:disabled { opacity: .4; cursor: default; }
+  #pageInput { width: 52px; text-align: center; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: 6px; padding: 6px; font-size: 13px; }
+  #totalPages { font-size: 13px; color: rgba(255,255,255,.6); }
+  #progress-bar-wrap { height: 3px; background: rgba(255,255,255,.15); }
+  #progress-bar { height: 3px; background: #c9a84c; transition: width .5s; }
+  #canvasContainer { flex: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; background: #555; padding: 20px; }
+  #pdfCanvas { box-shadow: 0 8px 40px rgba(0,0,0,.5); border-radius: 4px; }
+  .reading-status { font-size: 12px; color: rgba(255,255,255,.5); }
+</style>
+</head>
+<body>
+<div id="viewerShell">
+  <div id="toolbar">
+    <button class="tb-btn" onclick="history.back()">← Back</button>
+    <div class="tb-title" id="bookTitle">Loading…</div>
+    <button class="tb-btn" id="btnPrev" onclick="changePage(-1)" disabled>◀ Prev</button>
+    <input id="pageInput" type="number" min="1" value="1" onchange="jumpToPage(parseInt(this.value))"/>
+    <span id="totalPages">/ –</span>
+    <button class="tb-btn" id="btnNext" onclick="changePage(1)" disabled>Next ▶</button>
+    <button class="tb-btn" onclick="zoom(-0.2)">A–</button>
+    <button class="tb-btn" onclick="zoom(0.2)">A+</button>
+    <span class="reading-status" id="readingStatus"></span>
+  </div>
+  <div id="progress-bar-wrap"><div id="progress-bar" style="width:0%"></div></div>
+  <div id="canvasContainer">
+    <canvas id="pdfCanvas"></canvas>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+const u = API.guard(); if(!u) throw '';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const params = new URLSearchParams(location.search);
+const bookId = params.get('book');
+if (!bookId) { alert('No book specified'); history.back(); }
+
+let pdfDoc = null, currentPage = 1, totalPages = 0, scale = 1.4;
+let progressSaveTimer = null;
+const canvas = document.getElementById('pdfCanvas');
+const ctx = canvas.getContext('2d');
+
+async function init() {
+  // Load book metadata
+  const book = await API.get(`/books/${bookId}`);
+  document.getElementById('bookTitle').textContent = book.title || 'Reading';
+  document.title = (book.title || 'Book') + ' — KUL Reader';
+
+  // Load saved progress
+  const prog = await API.get(`/digital/${bookId}/progress`);
+  const startPage = prog.current_page || 1;
+
+  // Fetch PDF URL from backend
+  const pdfUrl = `/api/digital/${bookId}/pdf`;
+  
+  try {
+    const loadingTask = pdfjsLib.getDocument({ url: `http://localhost:5000${pdfUrl}`, withCredentials: false,
+      httpHeaders: { 'Authorization': 'Bearer ' + localStorage.getItem('kul_token') } });
+    pdfDoc = await loadingTask.promise;
+    totalPages = pdfDoc.numPages;
+    document.getElementById('totalPages').textContent = `/ ${totalPages}`;
+    document.getElementById('btnPrev').disabled = false;
+    document.getElementById('btnNext').disabled = false;
+    
+    currentPage = Math.min(startPage, totalPages);
+    await renderPage(currentPage);
+  } catch(e) {
+    document.getElementById('canvasContainer').innerHTML = 
+      `<div style="color:#fff;text-align:center;margin-top:80px"><div style="font-size:48px">📕</div><h3 style="margin:16px 0 8px">Cannot load PDF</h3><p style="opacity:.6">${e.message}</p></div>`;
+  }
+}
+
+async function renderPage(num) {
+  currentPage = num;
+  document.getElementById('pageInput').value = num;
+  document.getElementById('btnPrev').disabled = num <= 1;
+  document.getElementById('btnNext').disabled = num >= totalPages;
+  
+  const page = await pdfDoc.getPage(num);
+  const viewport = page.getViewport({ scale });
+  canvas.height = viewport.height;
+  canvas.width = viewport.width;
+  
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  
+  // Update progress bar
+  const pct = Math.round((num / totalPages) * 100);
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('readingStatus').textContent = `${pct}% complete`;
+
+  // Debounced save
+  clearTimeout(progressSaveTimer);
+  progressSaveTimer = setTimeout(() => {
+    API.post(`/digital/${bookId}/progress`, { current_page: num, total_pages: totalPages });
+  }, 1500);
+
+  document.getElementById('canvasContainer').scrollTop = 0;
+}
+
+function changePage(delta) {
+  const next = currentPage + delta;
+  if (next >= 1 && next <= totalPages) renderPage(next);
+}
+
+function jumpToPage(n) {
+  if (n >= 1 && n <= totalPages) renderPage(n);
+}
+
+function zoom(delta) {
+  scale = Math.max(0.5, Math.min(3.0, scale + delta));
+  renderPage(currentPage);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') changePage(1);
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   changePage(-1);
+});
+
+init();
+</script>
+</body>
+</html>

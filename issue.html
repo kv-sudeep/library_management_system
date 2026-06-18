@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Issue Book — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="ph"><h2>Issue Book</h2><p>Assign a book to a library member</p></div>
+      <div class="g2" style="margin-bottom:20px">
+        <div class="card-3d">
+          <h3 style="font-size:16px;margin-bottom:14px">Select Member</h3>
+          <input class="fi" id="userSearch" placeholder="Search members…" style="margin-bottom:10px" oninput="renderUsers()"/>
+          <select id="userSelect" class="fi" size="9" style="height:220px"></select>
+        </div>
+        <div class="card-3d">
+          <h3 style="font-size:16px;margin-bottom:14px">Select Book</h3>
+          <input class="fi" id="bookSearch" placeholder="Search available books…" style="margin-bottom:10px" oninput="renderBooks()"/>
+          <select id="bookSelect" class="fi" size="9" style="height:220px"></select>
+        </div>
+      </div>
+      <div class="card-3d" id="issuePanel" style="display:none">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="flex:1;font-size:13px;color:var(--t2)" id="issueSummary"></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="font-size:13px">Loan days:</label>
+            <input type="number" class="fi" id="loanDays" value="14" min="1" max="90" style="width:75px"/>
+          </div>
+          <button class="btn btn-dark" onclick="issueBook()">Issue Book →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="cbWrap"></div>
+
+<script>
+const u = API.guard('staff'); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'issue.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('Issue Book', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+KUL.initOutsideClick(); KUL.loadNotifications();
+
+let allUsers=[], allBooks=[];
+async function init(){
+  const ud = await API.get('/users/?role=member&per_page=200'); allUsers = ud.users||[];
+  const bd = await API.get('/books/?available_only=true&per_page=200'); allBooks = bd.books||[];
+  renderUsers(); renderBooks();
+}
+function renderUsers(){
+  const q=document.getElementById('userSearch').value.toLowerCase();
+  const filtered = allUsers.filter(x=>(x.full_name||x.username).toLowerCase().includes(q)||x.email.toLowerCase().includes(q));
+  document.getElementById('userSelect').innerHTML = filtered.map(x=>`<option value="${x.id}">${x.full_name||x.username} — ${x.email}</option>`).join('');
+  document.getElementById('userSelect').onchange=checkSel;
+}
+function renderBooks(){
+  const q=document.getElementById('bookSearch').value.toLowerCase();
+  const filtered = allBooks.filter(x=>x.title.toLowerCase().includes(q));
+  document.getElementById('bookSelect').innerHTML = filtered.map(x=>`<option value="${x.id}">${x.title} (${x.available_copies} avail.)</option>`).join('');
+  document.getElementById('bookSelect').onchange=checkSel;
+}
+function checkSel(){
+  const uid=document.getElementById('userSelect').value, bid=document.getElementById('bookSelect').value;
+  if(uid && bid){
+    const usr=allUsers.find(x=>x.id==uid), bk=allBooks.find(x=>x.id==bid);
+    document.getElementById('issueSummary').innerHTML = `Member: <strong>${usr?.full_name||usr?.username}</strong> &nbsp;·&nbsp; Book: <strong>${bk?.title}</strong>`;
+    document.getElementById('issuePanel').style.display='block';
+  }
+}
+async function issueBook(){
+  const uid=document.getElementById('userSelect').value, bid=document.getElementById('bookSelect').value;
+  const days=document.getElementById('loanDays').value;
+  if(!uid||!bid){ API.toast('Select both a member and a book','error'); return; }
+  const r = await API.post('/transactions/issue',{user_id:parseInt(uid),book_id:parseInt(bid),loan_days:parseInt(days)});
+  if(r.error) API.toast(r.error,'error');
+  else { API.toast('Book issued successfully!','success'); document.getElementById('issuePanel').style.display='none'; init(); }
+}
+init();
+</script>
+</body></html>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>My Books — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="ph"><h2>My Books</h2><p>Track your borrowed books and reading history</p></div>
+      <div class="tabs">
+        <button class="tab on" onclick="setTab('active',this)">Currently Borrowed</button>
+        <button class="tab" onclick="setTab('returned',this)">Return History</button>
+        <button class="tab" onclick="setTab('fines',this)">Outstanding Fines</button>
+        <button class="tab" onclick="setTab('reading',this)">📖 Reading Now</button>
+      </div>
+      <div id="tableWrap" class="tbl-wrap">
+        <table>
+          <thead><tr><th>Cover</th><th>Title</th><th>Author</th><th>Issued</th><th>Due</th><th>Status</th><th>Fine</th><th>Action</th></tr></thead>
+          <tbody id="mbBody"><tr><td colspan="8"><div class="ldr"><div class="spin"></div></div></td></tr></tbody>
+        </table>
+      </div>
+      <div id="readingGrid" style="display:none" class="books-grid" ></div>
+    </div>
+  </div>
+</div>
+<div id="cbWrap"></div>
+
+<script>
+const u = API.guard(); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'mybooks.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('My Books', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+KUL.initOutsideClick(); KUL.loadNotifications();
+
+let allTx = [], allProgress = [], tab='active';
+function setTab(t,btn){
+  tab=t;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  btn.classList.add('on');
+  if(t==='reading'){
+    document.getElementById('tableWrap').style.display='none';
+    document.getElementById('readingGrid').style.display='grid';
+    renderReading();
+  } else {
+    document.getElementById('tableWrap').style.display='block';
+    document.getElementById('readingGrid').style.display='none';
+    render();
+  }
+}
+
+async function load(){
+  allTx = await API.get('/transactions/my-history');
+  if(!Array.isArray(allTx)) allTx=[];
+  allProgress = await API.get('/digital/my-progress');
+  if(!Array.isArray(allProgress)) allProgress=[];
+  render();
+}
+function render(){
+  const filtered = allTx.filter(t=> tab==='active'?(t.status==='issued'||t.status==='overdue') : tab==='returned'?t.status==='returned' : (t.fine_amount>0 && !t.fine_paid));
+  document.getElementById('mbBody').innerHTML = filtered.length===0
+    ? `<tr><td colspan="8">${KUL.empty('📖','Nothing here',`Your ${tab} books will appear here`)}</td></tr>`
+    : filtered.map(t=>`
+      <tr>
+        <td>${t.book?.cover_image?`<img src="${t.book.cover_image}" style="width:32px;height:44px;object-fit:cover;border-radius:4px"/>`:'📕'}</td>
+        <td style="font-weight:600;font-size:13px;max-width:160px">${t.book?.title||'—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${t.book?.author?.name||'—'}</td>
+        <td style="font-size:12px;color:var(--muted)">${KUL.date(t.issue_date)}</td>
+        <td style="font-size:12px;color:var(--muted)">${KUL.date(t.due_date)}</td>
+        <td>${KUL.badge(t.status)}</td>
+        <td style="font-size:13px;font-weight:600;color:${t.fine_paid?'#16a34a':'#dc2626'}">${t.fine_amount>0?`$${t.fine_amount.toFixed(2)} ${t.fine_paid?'✓':'unpaid'}`:'—'}</td>
+        <td>${t.status==='issued'?`<button class="btn btn-ghost btn-xs" onclick="returnBook(${t.id})">Return</button>`:''}</td>
+      </tr>`).join('');
+}
+async function returnBook(id){
+  const r = await API.post(`/transactions/return/${id}`,{});
+  if(r.error) API.toast(r.error,'error'); else { API.toast(r.fine_amount>0?`Returned! Fine: $${r.fine_amount.toFixed(2)}`:'Returned!','success'); load(); }
+}
+function renderReading(){
+  const grid = document.getElementById('readingGrid');
+  if(!allProgress.length){ grid.innerHTML = KUL.empty('📕','No digital books in progress','Borrow a digital book and start reading'); return; }
+  grid.innerHTML = allProgress.map(p=>{
+    const b = p.book || {}; const pct = Math.round(p.percent_complete||0);
+    return `<div class="book-card" onclick="window.open('read.html?book=${b.id}','_blank')">
+      ${b.cover_image?`<img class="bc-img" src="${b.cover_image}" onerror="this.style.display='none'"/>`:'<div class="bc-ph">📕</div>'}
+      <div class="bc-body">
+        <div class="bc-title">${b.title||'—'}</div>
+        <div style="margin:8px 0 4px;background:#eee;border-radius:4px;height:6px">
+          <div style="width:${pct}%;height:6px;background:var(--gold);border-radius:4px;transition:width .5s"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">${pct}% · Page ${p.current_page}${p.total_pages?' of '+p.total_pages:''}</div>
+        <button class="btn btn-dark btn-sm" style="width:100%;justify-content:center" onclick="event.stopPropagation();window.open('read.html?book=${b.id}','_blank')">📄 Continue Reading</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+load();
+
+</script>
+</body></html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Login — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="api.js"></script>
+<style>
+body{background:#f4f2ed;display:flex;align-items:center;justify-content:center;min-height:100vh;overflow:hidden;perspective:1200px}
+.bg{position:fixed;inset:0;background:linear-gradient(135deg,#f0ece3 0%,#e8e2d6 50%,#ede7db 100%);z-index:0}
+
+/* Floating 3D books */
+.fb{position:absolute;border-radius:3px 8px 8px 3px;animation:bookFloat linear infinite;box-shadow:3px 3px 18px rgba(0,0,0,.10)}
+.fb::before{content:'';position:absolute;left:0;top:0;bottom:0;width:10px;background:rgba(0,0,0,.12);border-radius:3px 0 0 3px}
+
+/* Particles */
+.pt{position:absolute;border-radius:50%;animation:particleDrift linear infinite;opacity:0}
+
+/* Main card */
+.wrap{position:relative;z-index:10;width:100%;max-width:450px;padding:20px}
+.card{
+  background:rgba(255,255,255,.86);backdrop-filter:blur(28px);
+  border:1px solid rgba(255,255,255,.9);border-radius:24px;padding:46px 42px;
+  box-shadow:0 24px 80px rgba(139,100,20,.12),0 0 0 1px rgba(255,255,255,.5),inset 0 1px 0 rgba(255,255,255,.8);
+  transition:transform .4s cubic-bezier(.4,0,.2,1),box-shadow .4s;
+  transform-style:preserve-3d;
+}
+.emblem{
+  width:76px;height:76px;background:linear-gradient(135deg,#1a1a1a,#333);border-radius:20px;
+  display:inline-flex;align-items:center;justify-content:center;font-size:34px;
+  box-shadow:0 8px 28px rgba(0,0,0,.22);transform:rotate(-3deg);transition:transform .4s;
+  margin-bottom:14px;
+}
+.emblem:hover{transform:rotate(0) scale(1.06)}
+.brand{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;letter-spacing:-.4px;line-height:1.25}
+.brand-s{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#888;margin-top:3px}
+.gold-bar{width:40px;height:2px;background:linear-gradient(90deg,transparent,#c9a84c,transparent);margin:10px auto 0}
+
+.tabs{display:flex;background:#f2f0eb;border-radius:10px;padding:3px;margin-bottom:26px;gap:3px}
+.t{flex:1;padding:9px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:#888;transition:all .2s;font-family:'DM Sans',sans-serif}
+.t.on{background:#fff;color:#1a1a1a;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+
+.label{display:block;font-size:10.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#888;margin-bottom:7px}
+.input{width:100%;padding:12px 14px;border:1.5px solid #e2e0db;border-radius:11px;font-size:13.5px;font-family:'DM Sans',sans-serif;background:rgba(255,255,255,.8);color:#1a1a1a;outline:none;transition:all .2s;margin-bottom:14px}
+.input:focus{border-color:#1a1a1a;background:#fff;box-shadow:0 0 0 4px rgba(26,26,26,.06)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+.submit{
+  width:100%;padding:14px;background:linear-gradient(135deg,#1a1a1a,#2a2a2a);color:#fff;border:none;border-radius:11px;
+  font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;letter-spacing:.4px;
+  transition:all .3s;box-shadow:0 4px 18px rgba(0,0,0,.22);position:relative;overflow:hidden;margin-top:4px;
+}
+.submit::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.1),transparent);opacity:0;transition:opacity .3s}
+.submit:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,0,0,.28)}.submit:hover::before{opacity:1}
+.submit:disabled{opacity:.65;cursor:not-allowed;transform:none}
+
+.err{background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:11px 15px;font-size:13px;color:#dc2626;margin-bottom:14px}
+
+.demo{margin-top:22px;padding:15px 18px;background:linear-gradient(135deg,rgba(201,168,76,.08),rgba(201,168,76,.03));border:1px solid rgba(201,168,76,.25);border-radius:12px}
+.demo-t{font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#c9a84c;margin-bottom:8px}
+.demo-r{display:flex;justify-content:space-between;font-size:12px;color:#888;padding:3px 0;cursor:pointer;transition:color .15s;border-radius:4px}
+.demo-r:hover{color:#1a1a1a}.demo-r strong{color:#1a1a1a;min-width:72px}
+
+.sw{text-align:center;margin-top:18px;font-size:13px;color:#888}
+.sw button{background:none;border:none;color:#1a1a1a;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:underline;font-size:13px}
+
+.spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:7px}
+</style>
+</head>
+<body>
+<div class="bg" id="bg"></div>
+<div class="wrap">
+  <div class="card" id="card">
+    <div style="text-align:center;margin-bottom:30px">
+      <div class="emblem">📚</div>
+      <div class="brand">Kishkinda University Library</div>
+      <div class="brand-s">Digital Library Portal</div>
+      <div class="gold-bar"></div>
+    </div>
+
+    <div class="tabs">
+      <button class="t on" id="tLogin" onclick="setMode('login')">Sign In</button>
+      <button class="t" id="tReg"   onclick="setMode('register')">Register</button>
+    </div>
+
+    <div id="errBox"></div>
+
+    <form id="frm" onsubmit="handleSubmit(event)">
+      <div id="regFields" style="display:none">
+        <div class="g2">
+          <div><label class="label">Username</label><input class="input" id="uname" placeholder="johndoe"/></div>
+          <div><label class="label">Full Name</label><input class="input" id="fname" placeholder="John Doe"/></div>
+        </div>
+      </div>
+      <label class="label">Email Address</label>
+      <input class="input" id="email" type="email" placeholder="you@university.edu" required/>
+      <label class="label">Password</label>
+      <input class="input" id="pass" type="password" placeholder="••••••••" required/>
+      <button class="submit" id="sub" type="submit">Sign In to Portal</button>
+    </form>
+
+    <div class="demo">
+      <div class="demo-t">🎓 Demo Accounts — Click to fill</div>
+      <div class="demo-r" onclick="fill('admin@library.com','admin123')"><strong>Admin</strong><span>admin@library.com</span><span>admin123</span></div>
+      <div class="demo-r" onclick="fill('librarian@library.com','lib123')"><strong>Librarian</strong><span>librarian@library.com</span><span>lib123</span></div>
+      <div class="demo-r" onclick="fill('alice@email.com','pass123')"><strong>Member</strong><span>alice@email.com</span><span>pass123</span></div>
+    </div>
+    <div class="sw" id="swText">Don't have an account? <button onclick="setMode('register')">Register here</button></div>
+  </div>
+</div>
+
+<script>
+// BG scene
+const bg = document.getElementById('bg');
+const cols = ['#d4c5a9','#c9b99a','#bfaf93','#e0d4bc','#d2c4a8'];
+for(let i=0;i<16;i++){
+  const b=document.createElement('div'); b.className='fb';
+  const w=22+Math.random()*28, h=90+Math.random()*80;
+  b.style.cssText=`width:${w}px;height:${h}px;background:${cols[i%cols.length]};left:${Math.random()*95}%;top:${Math.random()*90}%;animation-delay:${Math.random()*8}s;animation-duration:${6+Math.random()*7}s;opacity:${.18+Math.random()*.25}`;
+  bg.appendChild(b);
+}
+for(let i=0;i<30;i++){
+  const p=document.createElement('div'); p.className='pt';
+  const s=1.5+Math.random()*3.5;
+  p.style.cssText=`width:${s}px;height:${s}px;background:rgba(201,168,76,${.15+Math.random()*.35});left:${Math.random()*100}%;animation-duration:${9+Math.random()*14}s;animation-delay:${Math.random()*12}s`;
+  bg.appendChild(p);
+}
+
+// 3D card tilt
+const card=document.getElementById('card');
+document.addEventListener('mousemove',e=>{
+  const r=card.getBoundingClientRect();
+  const dx=(e.clientX-r.left-r.width/2)/(r.width/2);
+  const dy=(e.clientY-r.top-r.height/2)/(r.height/2);
+  card.style.transform=`perspective(1000px) rotateY(${dx*7}deg) rotateX(${-dy*4}deg) translateY(-3px)`;
+});
+document.addEventListener('mouseleave',()=>{ card.style.transform=''; });
+
+// Auth logic
+let mode='login';
+function setMode(m){
+  mode=m;
+  document.getElementById('regFields').style.display=m==='register'?'block':'none';
+  document.getElementById('sub').textContent=m==='login'?'Sign In to Portal':'Create Account';
+  document.getElementById('tLogin').classList.toggle('on',m==='login');
+  document.getElementById('tReg').classList.toggle('on',m==='register');
+  document.getElementById('swText').innerHTML=m==='login'
+    ?`Don't have an account? <button onclick="setMode('register')">Register here</button>`
+    :`Already registered? <button onclick="setMode('login')">Sign in</button>`;
+  document.getElementById('errBox').innerHTML='';
+}
+function fill(e,p){ document.getElementById('email').value=e; document.getElementById('pass').value=p; if(mode==='register')setMode('login'); }
+function showErr(msg){ document.getElementById('errBox').innerHTML=`<div class="err">⚠️ ${msg}</div>`; }
+
+async function handleSubmit(e){
+  e.preventDefault();
+  document.getElementById('errBox').innerHTML='';
+  const btn=document.getElementById('sub');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Authenticating…';
+  const body={email:document.getElementById('email').value,password:document.getElementById('pass').value};
+  if(mode==='register'){
+    body.username=document.getElementById('uname').value;
+    body.full_name=document.getElementById('fname').value;
+    if(!body.username){showErr('Username is required.');btn.disabled=false;btn.textContent='Create Account';return;}
+  }
+  try{
+    const r=await fetch('http://localhost:5000/api/auth/'+(mode==='login'?'login':'register'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(d.error){showErr(d.error);}
+    else{
+      API.setSession(d.token,d.user);
+      window.location.href=(d.user.role==='admin'||d.user.role==='librarian')?'dashboard.html':'member.html';
+    }
+  }catch{showErr('Cannot connect to backend. Please ensure Flask is running on port 5000.');}
+  btn.disabled=false;btn.textContent=mode==='login'?'Sign In to Portal':'Create Account';
+}
+</script>
+</body></html>

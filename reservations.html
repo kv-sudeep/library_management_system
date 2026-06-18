@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Reservations — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="ph"><h2>My Reservations</h2><p>Books you've placed on hold</p></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Book</th><th>Reserved On</th><th>Expires</th><th>Status</th></tr></thead>
+          <tbody id="rBody"><tr><td colspan="4"><div class="ldr"><div class="spin"></div></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="cbWrap"></div>
+<script>
+const u = API.guard(); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'reservations.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('My Reservations', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+KUL.initOutsideClick(); KUL.loadNotifications();
+
+async function load(){
+  const data = await API.get('/transactions/my-reservations');
+  const list = Array.isArray(data)?data:[];
+  document.getElementById('rBody').innerHTML = list.length===0
+    ? `<tr><td colspan="4">${KUL.empty('🔖','No reservations','Reserve a book from the catalogue when unavailable')}</td></tr>`
+    : list.map(r=>`
+      <tr>
+        <td style="font-weight:600;font-size:13px">${r.book?.title||'—'}</td>
+        <td style="font-size:13px;color:var(--muted)">${KUL.date(r.reservation_date)}</td>
+        <td style="font-size:13px;color:var(--muted)">${KUL.date(r.expiry_date)}</td>
+        <td>${KUL.badge(r.status)}</td>
+      </tr>`).join('');
+}
+load();
+</script>
+</body></html>

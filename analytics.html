@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Analytics — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="ph"><h2>Analytics & Insights</h2><p>Data-driven intelligence for Kishkinda University Library</p></div>
+
+      <div class="tabs" id="tabBar">
+        <button class="tab on" onclick="show('overview',this)">📊 Overview</button>
+        <button class="tab" onclick="show('trends',this)">📈 Trends & Forecast</button>
+        <button class="tab" onclick="show('books',this)">📚 Book Intelligence</button>
+        <button class="tab" onclick="show('users',this)">👥 User Analytics</button>
+        <button class="tab" onclick="show('fines',this)">💰 Fine Reports</button>
+      </div>
+
+      <!-- OVERVIEW -->
+      <div id="sec-overview">
+        <div class="g4" id="kpiRow" style="margin-bottom:22px"></div>
+        <div class="g21" style="margin-bottom:20px">
+          <div class="cc"><div class="cc-t">Monthly Borrowing Volume</div><div class="cc-s">12-month historical trend</div><canvas id="ov1" height="230"></canvas></div>
+          <div class="cc"><div class="cc-t">Category Share</div><div class="cc-s">Borrowing distribution by genre</div><canvas id="ov2" height="230"></canvas></div>
+        </div>
+        <div class="g2">
+          <div class="cc"><div class="cc-t">Loan Status Breakdown</div><div class="cc-s">Current transaction states</div><canvas id="ov3" height="210"></canvas></div>
+          <div class="cc"><div class="cc-t">Day-of-Week Heatmap</div><div class="cc-s">Borrowing activity by day</div><canvas id="ov4" height="210"></canvas></div>
+        </div>
+      </div>
+
+      <!-- TRENDS & FORECAST -->
+      <div id="sec-trends" style="display:none">
+        <div class="cc" style="margin-bottom:20px">
+          <div class="cc-t">Demand Forecast — Machine Learning Model</div>
+          <div class="cc-s" id="tr_sub">scikit-learn LinearRegression · 6-month projection</div>
+          <canvas id="tr1" height="270"></canvas>
+        </div>
+        <div class="g2">
+          <div class="cc"><div class="cc-t">Period Comparison</div><div class="cc-s">First vs second half of year</div><canvas id="tr2" height="220"></canvas></div>
+          <div class="cc"><div class="cc-t">Borrows vs Available</div><div class="cc-s">Demand vs supply</div><canvas id="tr3" height="220"></canvas></div>
+        </div>
+      </div>
+
+      <!-- BOOK INTELLIGENCE -->
+      <div id="sec-books" style="display:none">
+        <div class="g2" style="margin-bottom:20px">
+          <div class="cc"><div class="cc-t">Most Borrowed</div><div class="cc-s">Top 10 all-time circulation</div><canvas id="bk1" height="300"></canvas></div>
+          <div class="cc"><div class="cc-t">Least Borrowed</div><div class="cc-s">Books needing promotion</div><canvas id="bk2" height="300"></canvas></div>
+        </div>
+        <div class="g2">
+          <div class="cc"><div class="cc-t">Category Performance</div><div class="cc-s">Total borrows by genre</div><canvas id="bk3" height="230"></canvas></div>
+          <div class="card-3d"><div class="cc-t" style="margin-bottom:4px">Purchase Recommendations</div><div class="cc-s">High-demand, low-stock books</div><div id="bk4"></div></div>
+        </div>
+      </div>
+
+      <!-- USER ANALYTICS -->
+      <div id="sec-users" style="display:none">
+        <div class="g4" id="uKpi" style="margin-bottom:22px"></div>
+        <div class="g2" style="margin-bottom:20px">
+          <div class="cc"><div class="cc-t">Top Readers</div><div class="cc-s">Members by borrow count</div><canvas id="us1" height="260"></canvas></div>
+          <div class="cc"><div class="cc-t">Reading Patterns</div><div class="cc-s">Activity radar by day</div><canvas id="us2" height="260"></canvas></div>
+        </div>
+        <div class="card-3d"><div class="sh2"><span class="sh2-t">Top Readers Detail</span></div><div id="us3"></div></div>
+      </div>
+
+      <!-- FINE REPORTS -->
+      <div id="sec-fines" style="display:none">
+        <div class="g4" id="fKpi" style="margin-bottom:22px"></div>
+        <div class="g2">
+          <div class="cc"><div class="cc-t">Fine Collection Bar</div><div class="cc-s">Total, collected, outstanding</div><canvas id="fi1" height="250"></canvas></div>
+          <div class="cc"><div class="cc-t">Paid vs Unpaid</div><div class="cc-s">Fine status distribution</div><canvas id="fi2" height="250"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="cbWrap"></div>
+
+<script>
+const u = API.guard('staff'); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'analytics.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('Analytics Center', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+KUL.initOutsideClick(); KUL.loadNotifications(); KUL.chartDefaults();
+
+const C = KUL.COLORS, G = KUL.GOLD;
+const charts = {};
+function mk(id,cfg){ 
+  const c = document.getElementById(id);
+  if(!c.parentElement.dataset.wrapped){
+    const w = document.createElement('div');
+    w.style.position = 'relative'; w.style.height = c.getAttribute('height') + 'px'; w.style.width = '100%';
+    w.dataset.wrapped = 'true'; c.parentNode.insertBefore(w, c); w.appendChild(c);
+  }
+  if(charts[id])charts[id].destroy(); charts[id]=new Chart(c,cfg); 
+}
+const base = KUL.baseChart();
+const tt = {tooltip:{backgroundColor:'rgba(20,20,20,.92)',padding:10,cornerRadius:8}};
+const sc = {scales:{x:{grid:{display:false}},y:{grid:{color:'#f0f0ec'},beginAtZero:true}}};
+const scH = {scales:{x:{grid:{color:'#f0f0ec'},beginAtZero:true},y:{grid:{display:false},ticks:{font:{size:10}}}}};
+
+function show(name, btn){
+  document.querySelectorAll('[id^="sec-"]').forEach(d=>d.style.display='none');
+  document.getElementById('sec-'+name).style.display='block';
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  btn.classList.add('on');
+  const loaders = {overview:loadOverview,trends:loadTrends,books:loadBooks,users:loadUsers,fines:loadFines};
+  loaders[name]();
+}
+
+async function loadOverview(){
+  const [kpis,mon,cat,hab] = await Promise.all([API.get('/analytics/kpis'),API.get('/analytics/monthly-trends'),API.get('/analytics/category-analysis'),API.get('/analytics/user-reading-habits')]);
+  const kd=[{i:'📚',v:kpis.total_books,l:'Total Books'},{i:'👥',v:kpis.total_users,l:'Members'},{i:'📖',v:kpis.issued_books,l:'Active Loans'},{i:'⚠️',v:kpis.overdue_books,l:'Overdue'},{i:'🔖',v:kpis.pending_reservations,l:'Reservations'},{i:'✅',v:kpis.returned_books,l:'Returned'},{i:'💰',v:'$'+(kpis.total_fines||0).toFixed(0),l:'Total Fines'},{i:'📦',v:kpis.available_books,l:'Available'}];
+  document.getElementById('kpiRow').innerHTML=kd.map((k,i)=>`<div class="stat-card" style="animation:countUp .5s ${i*.06}s both"><span class="stat-icon">${k.i}</span><span class="stat-num">${k.v}</span><span class="stat-lbl">${k.l}</span></div>`).join('');
+  if(mon.labels?.length){const ctx=document.getElementById('ov1').getContext('2d');const g=ctx.createLinearGradient(0,0,0,230);g.addColorStop(0,'rgba(26,26,26,.14)');g.addColorStop(1,'rgba(26,26,26,0)');mk('ov1',{type:'line',data:{labels:mon.labels.map(l=>l.slice(5)),datasets:[{data:mon.data,borderColor:'#1a1a1a',backgroundColor:g,borderWidth:2.5,fill:true,tension:.4,pointRadius:4,pointBackgroundColor:'#1a1a1a',pointBorderColor:'#fff',pointBorderWidth:2,label:'Borrows'}]},options:{...base,...tt,...sc}});}
+  if(cat.labels?.length){mk('ov2',{type:'doughnut',data:{labels:cat.labels,datasets:[{data:cat.data,backgroundColor:C,borderWidth:3,borderColor:'#fff',hoverOffset:10}]},options:{...base,cutout:'62%',plugins:{legend:{display:true,position:'right',labels:{font:{size:10},boxWidth:11,padding:8}},...tt}}});}
+  mk('ov3',{type:'pie',data:{labels:['Issued','Returned','Overdue'],datasets:[{data:[kpis.issued_books,kpis.returned_books,kpis.overdue_books],backgroundColor:['#1a1a1a',G,'#dc2626'],borderWidth:3,borderColor:'#fff',hoverOffset:8}]},options:{...base,plugins:{legend:{display:true,position:'bottom',labels:{font:{size:11},boxWidth:14}},...tt}}});
+  if(hab.day_of_week){const max=Math.max(...hab.day_of_week.data);mk('ov4',{type:'bar',data:{labels:hab.day_of_week.labels.map(d=>d.slice(0,3)),datasets:[{data:hab.day_of_week.data,backgroundColor:hab.day_of_week.data.map(v=>v===max?G:'#1a1a1a'),borderRadius:9,borderSkipped:false,label:'Borrows'}]},options:{...base,...tt,...sc}});}
+}
+
+async function loadTrends(){
+  const [fc,mon,kpis]=await Promise.all([API.get('/analytics/demand-forecast'),API.get('/analytics/monthly-trends'),API.get('/analytics/kpis')]);
+  if(fc.historical?.labels){
+    document.getElementById('tr_sub').textContent=`Trend: ${fc.trend} · scikit-learn LinearRegression · 6-month forward projection`;
+    const hL=fc.historical.labels.map(l=>l.slice(5)),hD=fc.historical.data,fL=(fc.forecast.labels||[]).map(l=>l.slice(5)),fD=fc.forecast.data||[];
+    const ctx=document.getElementById('tr1').getContext('2d');
+    const g1=ctx.createLinearGradient(0,0,0,270);g1.addColorStop(0,'rgba(26,26,26,.12)');g1.addColorStop(1,'rgba(26,26,26,0)');
+    const g2=ctx.createLinearGradient(0,0,0,270);g2.addColorStop(0,'rgba(201,168,76,.18)');g2.addColorStop(1,'rgba(201,168,76,0)');
+    mk('tr1',{type:'line',data:{labels:[...hL,...fL],datasets:[
+      {label:'Historical',data:[...hD,...new Array(fL.length).fill(null)],borderColor:'#1a1a1a',backgroundColor:g1,borderWidth:2.5,fill:true,tension:.4,pointRadius:3.5,pointBackgroundColor:'#1a1a1a'},
+      {label:'ML Forecast',data:[...new Array(hL.length-1).fill(null),hD[hD.length-1],...fD],borderColor:G,backgroundColor:g2,borderWidth:2.5,borderDash:[7,4],fill:true,tension:.4,pointRadius:4.5,pointBackgroundColor:G},
+    ]},options:{...base,plugins:{legend:{display:true,labels:{font:{size:11},boxWidth:15,padding:16}},...tt},...sc}});
+  }
+  if(mon.labels?.length>=6){
+    const h=Math.floor(mon.labels.length/2),l=Math.min(h,mon.labels.length-h);
+    mk('tr2',{type:'line',data:{labels:Array.from({length:l},(_,i)=>'M'+(i+1)),datasets:[
+      {label:'Period 1',data:mon.data.slice(0,l),borderColor:'#aaa',borderWidth:2,tension:.4,pointRadius:3,fill:false},
+      {label:'Period 2',data:mon.data.slice(h,h+l),borderColor:'#1a1a1a',borderWidth:2.5,tension:.4,pointRadius:3,fill:false},
+    ]},options:{...base,plugins:{legend:{display:true,labels:{font:{size:10}}},...tt},...sc}});
+    mk('tr3',{type:'bar',data:{labels:mon.labels.slice(-8).map(l=>l.slice(5)),datasets:[
+      {label:'Borrows',data:mon.data.slice(-8),backgroundColor:'#1a1a1a',borderRadius:6},
+      {label:'Available',data:mon.data.slice(-8).map(v=>Math.max(0,(kpis.total_books||20)-v)),backgroundColor:G,borderRadius:6},
+    ]},options:{...base,plugins:{legend:{display:true,labels:{font:{size:10}}},...tt},...sc}});
+  }
+}
+
+async function loadBooks(){
+  const [mb,lb,cat,inv]=await Promise.all([API.get('/analytics/most-borrowed?limit=10'),API.get('/analytics/least-borrowed'),API.get('/analytics/category-analysis'),API.get('/analytics/inventory-forecast')]);
+  if(mb?.length){mk('bk1',{type:'bar',data:{labels:mb.map(b=>b.title.length>22?b.title.slice(0,22)+'…':b.title),datasets:[{data:mb.map(b=>b.borrow_count),backgroundColor:mb.map((_,i)=>i===0?G:C[Math.min(i,C.length-1)]),borderRadius:6,borderSkipped:false,label:'Borrows'}]},options:{...base,...tt,indexAxis:'y',...scH}});}
+  if(lb?.length){mk('bk2',{type:'bar',data:{labels:lb.map(b=>b.title.length>22?b.title.slice(0,22)+'…':b.title),datasets:[{data:lb.map(b=>b.borrow_count),backgroundColor:'#e8e8e4',borderRadius:6,borderSkipped:false,borderWidth:1,borderColor:'#d0cdc6',label:'Borrows'}]},options:{...base,...tt,indexAxis:'y',...scH}});}
+  if(cat.labels?.length){mk('bk3',{type:'bar',data:{labels:cat.labels,datasets:[{data:cat.data,backgroundColor:C,borderRadius:9,borderSkipped:false,label:'Borrows'}]},options:{...base,...tt,...sc}});}
+  document.getElementById('bk4').innerHTML = inv?.length ? inv.slice(0,6).map(b=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2f1ee">
+      <div><div style="font-size:13px;font-weight:600">${b.title}</div><div style="font-size:11px;color:var(--muted)">Copies: ${b.current_copies} · Rate: ${b.borrow_rate}×</div></div>
+      <span style="background:#fef9e7;color:#c9a84c;border:1px solid #f9e79f;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">Buy +${b.suggested_purchase}</span>
+    </div>`).join('') : '<p style="color:var(--muted);font-size:13px;padding:12px 0">No urgent purchases needed.</p>';
+}
+
+async function loadUsers(){
+  const h=await API.get('/analytics/user-reading-habits');
+  const busDay=(h.day_of_week?.labels||[])[((h.day_of_week?.data)||[]).indexOf(Math.max(...(h.day_of_week?.data||[0])))];
+  document.getElementById('uKpi').innerHTML=[
+    {i:'📊',v:h.avg_books_per_user||0,l:'Avg Books/User'},{i:'🏆',v:h.top_readers?.[0]?.count||0,l:'Top Reader Count'},
+    {i:'📅',v:(busDay||'—').slice(0,3),l:'Busiest Day'},{i:'👥',v:h.top_readers?.length||0,l:'Active Readers'},
+  ].map((k,i)=>`<div class="stat-card" style="animation:countUp .5s ${i*.08}s both"><span class="stat-icon">${k.i}</span><span class="stat-num">${k.v}</span><span class="stat-lbl">${k.l}</span></div>`).join('');
+  if(h.top_readers?.length){
+    mk('us1',{type:'bar',data:{labels:h.top_readers.slice(0,8).map(r=>r.username),datasets:[{data:h.top_readers.slice(0,8).map(r=>r.count),backgroundColor:h.top_readers.slice(0,8).map((_,i)=>i===0?G:i<3?'#3a3a3a':'#1a1a1a'),borderRadius:10,borderSkipped:false,label:'Books'}]},options:{...base,...tt,...sc}});
+    document.getElementById('us3').innerHTML=h.top_readers.slice(0,8).map((r,i)=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid #f2f1ee">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:32px;height:32px;border-radius:50%;background:${i===0?'linear-gradient(135deg,#c9a84c,#d4b460)':i<3?'#1a1a1a':'var(--light)'};color:${i<3?'#fff':'var(--t2)'};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${i+1}</div>
+          <div><div style="font-weight:600;font-size:13px">${r.full_name||r.username}</div><div style="font-size:11px;color:var(--muted)">@${r.username}</div></div>
+        </div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600">${r.count} <span style="font-size:11px;color:var(--muted);font-family:'DM Sans',sans-serif">books</span></div>
+      </div>`).join('');
+  }
+  if(h.day_of_week){mk('us2',{type:'radar',data:{labels:h.day_of_week.labels.map(d=>d.slice(0,3)),datasets:[{data:h.day_of_week.data,borderColor:'#1a1a1a',backgroundColor:'rgba(26,26,26,.08)',borderWidth:2,pointBackgroundColor:'#1a1a1a',pointRadius:4,label:'Borrows'}]},options:{...base,plugins:{legend:{display:false},...tt},scales:{r:{grid:{color:'#f0f0ec'},ticks:{backdropColor:'transparent',font:{size:9}},pointLabels:{font:{size:11}}}}}});}
+}
+
+async function loadFines(){
+  const f=await API.get('/analytics/fine-report');
+  document.getElementById('fKpi').innerHTML=[
+    {i:'💰',v:`$${(f.total_fines||0).toFixed(2)}`,l:'Total Fines'},{i:'✅',v:`$${(f.paid_fines||0).toFixed(2)}`,l:'Collected'},
+    {i:'⚠️',v:`$${(f.unpaid_fines||0).toFixed(2)}`,l:'Outstanding'},{i:'📅',v:f.overdue_count||0,l:'Overdue Items'},
+  ].map((k,i)=>`<div class="stat-card" style="animation:countUp .5s ${i*.08}s both"><span class="stat-icon">${k.i}</span><span class="stat-num">${k.v}</span><span class="stat-lbl">${k.l}</span></div>`).join('');
+  mk('fi1',{type:'bar',data:{labels:['Total','Collected','Outstanding'],datasets:[{data:[f.total_fines||0,f.paid_fines||0,f.unpaid_fines||0],backgroundColor:['#1a1a1a',G,'#dc2626'],borderRadius:12,borderSkipped:false,label:'$'}]},options:{...base,plugins:{tooltip:{callbacks:{label:c=>`$${Number(c.raw).toFixed(2)}`},backgroundColor:'rgba(20,20,20,.92)',padding:10,cornerRadius:8},legend:{display:false}},scales:{x:{grid:{display:false}},y:{ticks:{callback:v=>'$'+v},grid:{color:'#f0f0ec'}}}}});
+  mk('fi2',{type:'doughnut',data:{labels:['Paid','Unpaid'],datasets:[{data:[f.paid_fines||0,f.unpaid_fines||0],backgroundColor:['#1a1a1a','#e8e8e4'],borderWidth:4,borderColor:'#fff',hoverOffset:10}]},options:{...base,cutout:'65%',plugins:{legend:{display:true,position:'bottom',labels:{font:{size:12},boxWidth:16}},...tt}}});
+}
+
+loadOverview();
+</script>
+</body></html>

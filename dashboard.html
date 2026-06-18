@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Dashboard — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+
+      <!-- HERO -->
+      <div class="hero">
+        <div class="hero-h">Welcome back, <em id="heroName">Administrator</em></div>
+        <div class="hero-p">Your library command centre. Monitor circulation, analytics, and all operations in real time.</div>
+        <div class="hero-stats">
+          <div><span class="hs-val" id="hs1">—</span><span class="hs-lbl">Total Books</span></div>
+          <div><span class="hs-val" id="hs2">—</span><span class="hs-lbl">Members</span></div>
+          <div><span class="hs-val" id="hs3">—</span><span class="hs-lbl">Active Loans</span></div>
+          <div><span class="hs-val" id="hs4">—</span><span class="hs-lbl">Overdue</span></div>
+        </div>
+        <div class="hero-acts">
+          <a href="books.html" class="btn" style="background:#fff;color:#1a1a1a">Browse Books</a>
+          <a href="issue.html" class="btn" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25)">Issue Book</a>
+          <a href="analytics.html" class="btn" style="background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.2)">Full Analytics →</a>
+        </div>
+      </div>
+
+      <!-- KPI CARDS -->
+      <div class="g4" id="kpiGrid" style="margin-bottom:26px">
+        <div class="ldr"><div class="spin"></div></div>
+      </div>
+
+      <!-- CHARTS ROW 1 -->
+      <div class="g21" style="margin-bottom:22px">
+        <div class="cc"><div class="cc-t">Monthly Borrowing Trends</div><div class="cc-s">12-month circulation activity</div><canvas id="cMonthly" height="210"></canvas></div>
+        <div class="cc"><div class="cc-t">Category Distribution</div><div class="cc-s">Books by genre</div><canvas id="cCat" height="210"></canvas></div>
+      </div>
+
+      <!-- CHARTS ROW 2 -->
+      <div class="g2" style="margin-bottom:22px">
+        <div class="cc"><div class="cc-t">Top Borrowed Books</div><div class="cc-s">Most circulated titles</div><canvas id="cTop" height="220"></canvas></div>
+        <div class="cc"><div class="cc-t">Demand Forecast (ML)</div><div class="cc-s" id="fcSub">scikit-learn LinearRegression</div><canvas id="cFc" height="220"></canvas></div>
+      </div>
+
+      <!-- ROW 3 -->
+      <div class="g2" style="margin-bottom:22px">
+        <div class="cc"><div class="cc-t">Day-of-Week Activity</div><div class="cc-s">When members borrow most</div><canvas id="cDow" height="200"></canvas></div>
+        <div class="cc"><div class="cc-t">Fine Collection</div><div class="cc-s">Total, collected, outstanding</div><canvas id="cFine" height="200"></canvas></div>
+      </div>
+
+      <!-- TOP READERS + RECENT -->
+      <div class="g2">
+        <div class="card-3d"><div class="sh2"><span class="sh2-t">Top Readers</span><a href="users.html" class="btn btn-ghost btn-sm">All Users</a></div><div id="topReaders"></div></div>
+        <div class="card-3d"><div class="sh2"><span class="sh2-t">Recent Transactions</span><a href="transactions.html" class="btn btn-ghost btn-sm">View All</a></div><div id="recentTxs"></div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<div id="cbWrap"></div>
+
+<script>
+const u = API.guard('staff'); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u, 'dashboard.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('Dashboard', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+document.getElementById('heroName').textContent = u.full_name || u.username;
+KUL.initOutsideClick();
+KUL.loadNotifications();
+KUL.chartDefaults();
+
+const COLORS = KUL.COLORS;
+const GOLD   = KUL.GOLD;
+let charts = {};
+function mk(id,cfg){ 
+  const c = document.getElementById(id);
+  if(!c.parentElement.dataset.wrapped){
+    const w = document.createElement('div');
+    w.style.position = 'relative'; w.style.height = c.getAttribute('height') + 'px'; w.style.width = '100%';
+    w.dataset.wrapped = 'true'; c.parentNode.insertBefore(w, c); w.appendChild(c);
+  }
+  if(charts[id])charts[id].destroy(); charts[id]=new Chart(c,cfg); 
+}
+
+async function init(){
+  // KPIs
+  const kpis = await API.get('/analytics/kpis');
+  document.getElementById('hs1').textContent = kpis.total_books||0;
+  document.getElementById('hs2').textContent = kpis.total_users||0;
+  document.getElementById('hs3').textContent = kpis.issued_books||0;
+  document.getElementById('hs4').textContent = kpis.overdue_books||0;
+
+  const kpiDefs = [
+    {i:'📚',v:kpis.total_books||0,l:'Total Books',s:`${kpis.available_books||0} available`},
+    {i:'👥',v:kpis.total_users||0,l:'Members',s:`+${kpis.new_users_month||0} this month`},
+    {i:'📖',v:kpis.issued_books||0,l:'Active Loans',s:'Currently borrowed'},
+    {i:'⚠️',v:kpis.overdue_books||0,l:'Overdue',s:'Need attention'},
+    {i:'🔖',v:kpis.pending_reservations||0,l:'Reservations',s:'Awaiting books'},
+    {i:'✅',v:kpis.returned_books||0,l:'Returned',s:'All time'},
+    {i:'💰',v:`$${(kpis.total_fines||0).toFixed(0)}`,l:'Total Fines',s:`$${(kpis.unpaid_fines||0).toFixed(0)} unpaid`},
+    {i:'📦',v:kpis.available_books||0,l:'Available Copies',s:'Ready to borrow'},
+  ];
+  document.getElementById('kpiGrid').innerHTML = kpiDefs.map((k,i)=>`
+    <div class="stat-card" style="animation:countUp .5s ${i*.07}s both">
+      <span class="stat-icon">${k.i}</span>
+      <span class="stat-num">${k.v}</span>
+      <span class="stat-lbl">${k.l}</span>
+      <span class="stat-sub">${k.s}</span>
+    </div>`).join('');
+
+  // Monthly
+  const mon = await API.get('/analytics/monthly-trends');
+  if(mon.labels?.length){
+    const ctx=document.getElementById('cMonthly').getContext('2d');
+    const g=ctx.createLinearGradient(0,0,0,210); g.addColorStop(0,'rgba(26,26,26,.15)'); g.addColorStop(1,'rgba(26,26,26,0)');
+    mk('cMonthly',{type:'line',data:{labels:mon.labels.map(l=>l.slice(5)),datasets:[{data:mon.data,borderColor:'#1a1a1a',backgroundColor:g,borderWidth:2.5,fill:true,tension:.4,pointRadius:4,pointBackgroundColor:'#1a1a1a',pointBorderColor:'#fff',pointBorderWidth:2,label:'Borrows'}]},
+      options:{...KUL.baseChart(),scales:{x:{grid:{display:false}},y:{grid:{color:'#f0f0ec'},beginAtZero:true}}}});
+  }
+
+  // Category donut
+  const cat = await API.get('/analytics/category-analysis');
+  if(cat.labels?.length){
+    mk('cCat',{type:'doughnut',data:{labels:cat.labels,datasets:[{data:cat.data,backgroundColor:COLORS,borderWidth:3,borderColor:'#fff',hoverOffset:10}]},
+      options:{...KUL.baseChart(),cutout:'62%',plugins:{legend:{display:true,position:'right',labels:{font:{size:10},boxWidth:11,padding:8}},tooltip:{backgroundColor:'rgba(20,20,20,.92)',padding:10,cornerRadius:8}}}});
+  }
+
+  // Top books
+  const mb = await API.get('/analytics/most-borrowed?limit=8');
+  if(mb?.length){
+    mk('cTop',{type:'bar',data:{labels:mb.map(b=>b.title.length>22?b.title.slice(0,22)+'…':b.title),datasets:[{data:mb.map(b=>b.borrow_count),backgroundColor:mb.map((_,i)=>i===0?GOLD:COLORS[Math.min(i,COLORS.length-1)]),borderRadius:7,borderSkipped:false,label:'Borrows'}]},
+      options:{...KUL.baseChart(),indexAxis:'y',scales:{x:{grid:{color:'#f0f0ec'},beginAtZero:true},y:{grid:{display:false},ticks:{font:{size:10}}}}}});
+  }
+
+  // Forecast
+  const fc = await API.get('/analytics/demand-forecast');
+  if(fc.historical?.labels){
+    document.getElementById('fcSub').textContent=`Trend: ${fc.trend} · 6-month ML forecast`;
+    const hL=fc.historical.labels.map(l=>l.slice(5)), hD=fc.historical.data;
+    const fL=(fc.forecast.labels||[]).map(l=>l.slice(5)), fD=fc.forecast.data||[];
+    const ctx=document.getElementById('cFc').getContext('2d');
+    const g1=ctx.createLinearGradient(0,0,0,220); g1.addColorStop(0,'rgba(26,26,26,.1)'); g1.addColorStop(1,'rgba(26,26,26,0)');
+    const g2=ctx.createLinearGradient(0,0,0,220); g2.addColorStop(0,'rgba(201,168,76,.18)'); g2.addColorStop(1,'rgba(201,168,76,0)');
+    mk('cFc',{type:'line',data:{labels:[...hL,...fL],datasets:[
+      {label:'Historical',data:[...hD,...new Array(fL.length).fill(null)],borderColor:'#1a1a1a',backgroundColor:g1,borderWidth:2.5,fill:true,tension:.4,pointRadius:3,pointBackgroundColor:'#1a1a1a'},
+      {label:'Forecast',data:[...new Array(hL.length-1).fill(null),hD[hD.length-1],...fD],borderColor:GOLD,backgroundColor:g2,borderWidth:2.5,borderDash:[6,4],fill:true,tension:.4,pointRadius:4,pointBackgroundColor:GOLD},
+    ]},options:{...KUL.baseChart(),plugins:{legend:{display:true,labels:{font:{size:10},boxWidth:13}},tooltip:{backgroundColor:'rgba(20,20,20,.92)',padding:10,cornerRadius:8}},scales:{x:{grid:{display:false}},y:{grid:{color:'#f0f0ec'},beginAtZero:true}}}});
+  }
+
+  // DOW
+  const hab = await API.get('/analytics/user-reading-habits');
+  if(hab.day_of_week){
+    const maxV=Math.max(...hab.day_of_week.data);
+    mk('cDow',{type:'bar',data:{labels:hab.day_of_week.labels.map(d=>d.slice(0,3)),datasets:[{data:hab.day_of_week.data,backgroundColor:hab.day_of_week.data.map(v=>v===maxV?GOLD:'#1a1a1a'),borderRadius:9,borderSkipped:false,label:'Borrows'}]},
+      options:{...KUL.baseChart(),scales:{x:{grid:{display:false}},y:{grid:{color:'#f0f0ec'},beginAtZero:true}}}});
+    // Top readers
+    document.getElementById('topReaders').innerHTML = (hab.top_readers||[]).slice(0,6).map((r,i)=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2f1ee">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:28px;height:28px;border-radius:50%;background:${i===0?'linear-gradient(135deg,#c9a84c,#d4b460)':i<3?'#1a1a1a':'var(--light)'};color:${i<3?'#fff':'var(--t2)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">${i+1}</div>
+          <div><div style="font-size:13px;font-weight:600">${r.full_name||r.username}</div><div style="font-size:11px;color:var(--muted)">@${r.username}</div></div>
+        </div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600">${r.count} <span style="font-size:11px;color:var(--muted);font-family:'DM Sans',sans-serif">books</span></div>
+      </div>`).join('') || KUL.empty('👤','No data yet');
+  }
+
+  // Fines
+  const fin = await API.get('/analytics/fine-report');
+  mk('cFine',{type:'bar',data:{labels:['Total','Collected','Outstanding'],datasets:[{data:[fin.total_fines||0,fin.paid_fines||0,fin.unpaid_fines||0],backgroundColor:['#1a1a1a',GOLD,'#dc2626'],borderRadius:11,borderSkipped:false,label:'Amount ($)'}]},
+    options:{...KUL.baseChart(),plugins:{tooltip:{callbacks:{label:c=>`$${Number(c.raw).toFixed(2)}`},backgroundColor:'rgba(20,20,20,.92)',padding:10,cornerRadius:8},legend:{display:false}},scales:{x:{grid:{display:false}},y:{ticks:{callback:v=>'$'+v},grid:{color:'#f0f0ec'}}}}});
+
+  // Recent transactions
+  const txs = await API.get('/transactions/all?page=1&per_page=6');
+  const list = txs.transactions||[];
+  document.getElementById('recentTxs').innerHTML = list.length===0
+    ? KUL.empty('📋','No transactions yet')
+    : list.map(t=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2f1ee">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:32px;height:32px;border-radius:8px;background:var(--light);display:flex;align-items:center;justify-content:center;font-size:15px">📖</div>
+          <div>
+            <div style="font-size:12.5px;font-weight:600;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.book?.title||'—'}</div>
+            <div style="font-size:11px;color:var(--muted)">${t.user?.username||'—'} · ${KUL.date(t.issue_date)}</div>
+          </div>
+        </div>
+        ${KUL.badge(t.status)}
+      </div>`).join('');
+}
+
+init().catch(console.error);
+</script>
+</body></html>

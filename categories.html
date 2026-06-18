@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Categories — Kishkinda University Library</title>
+<link rel="stylesheet" href="styles.css"/>
+<script src="i18n.js"></script><script src="api.js"></script><script src="components.js"></script>
+</head>
+<body>
+<div class="layout">
+  <div id="sbWrap"></div>
+  <div class="main" id="mainWrap">
+    <div id="tbWrap"></div>
+    <div class="page">
+      <div class="sh2"><div><h2 style="font-size:34px;letter-spacing:-1px">Categories</h2><p style="color:var(--muted);font-size:14px">Manage book categories</p></div><button class="btn btn-dark" onclick="openAdd()">+ Add Category</button></div>
+      <div class="g3" id="catGrid"><div class="ldr"><div class="spin"></div></div></div>
+    </div>
+  </div>
+</div>
+<div id="modalRoot"></div>
+<div id="cbWrap"></div>
+
+<script>
+const u = API.guard('staff'); if(!u) throw '';
+document.getElementById('sbWrap').innerHTML = KUL.sidebar(u,'categories.html');
+document.getElementById('tbWrap').innerHTML = KUL.topbar('Categories', u);
+document.getElementById('cbWrap').innerHTML = KUL.chatbot();
+KUL.initOutsideClick(); KUL.loadNotifications();
+
+async function load(){
+  const cats = await API.get('/books/categories');
+  document.getElementById('catGrid').innerHTML = (Array.isArray(cats)?cats:[]).map(c=>`
+    <div class="card-3d">
+      <div style="font-size:32px;margin-bottom:12px">${c.icon||'📁'}</div>
+      <h3 style="font-size:18px;margin-bottom:4px">${c.name}</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px">${c.description||''}</p>
+      <span style="font-size:13px;color:var(--t2);font-weight:600">${c.book_count} books</span>
+    </div>`).join('');
+}
+function openAdd(){
+  document.getElementById('modalRoot').innerHTML = `
+    <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+      <div class="modal" style="max-width:420px">
+        <h3>Add Category</h3>
+        <form onsubmit="submitAdd(event)">
+          <div class="fg"><label class="fl">Name</label><input class="fi" id="c_name" required/></div>
+          <div class="fg"><label class="fl">Description</label><input class="fi" id="c_desc"/></div>
+          <div class="fg"><label class="fl">Icon (emoji)</label><input class="fi" id="c_icon" placeholder="e.g. 📚"/></div>
+          <div class="modal-foot"><button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button><button type="submit" class="btn btn-dark">Add</button></div>
+        </form>
+      </div>
+    </div>`;
+}
+function closeModal(){ document.getElementById('modalRoot').innerHTML=''; }
+async function submitAdd(e){
+  e.preventDefault();
+  const r = await API.post('/admin/categories',{name:document.getElementById('c_name').value,description:document.getElementById('c_desc').value,icon:document.getElementById('c_icon').value});
+  if(r.error) API.toast(r.error,'error'); else { API.toast('Added!','success'); closeModal(); load(); }
+}
+load();
+</script>
+</body></html>
